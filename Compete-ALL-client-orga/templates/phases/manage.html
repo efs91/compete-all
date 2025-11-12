@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Gérer les phases - {{ evenement.nom }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Phases de {{ evenement.nom }}</h2>
+</div>
+
+<!-- Phases actuelles -->
+<div class="card">
+    <h3>Phases configurées</h3>
+    {% if phases %}
+        <table style="margin-top: 15px;">
+            <thead>
+                <tr>
+                    <th>Phase</th>
+                    <th>Format</th>
+                    <th>Type</th>
+                    <th>Inscrits</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for phase in phases %}
+                <tr>
+                    <td>{{ phase.nom }}</td>
+                    <td><span class="badge badge-primary">{{ phase.format.nom if phase.format and phase.format.nom else 'N/A' }}</span></td>
+                    <td><span class="badge badge-success">{{ phase.type.nom if phase.type and phase.type.nom else 'N/A' }}</span></td>
+                    <td>{{ phase.joueurs|length if phase.joueurs else 0 }} joueurs</td>
+                    <td>
+                        <div class="actions">
+                            <a href="{{ url_for('manage_inscriptions', evenement_id=evenement.id) }}" 
+                               class="btn btn-small">Inscrits</a>
+                            <form method="POST" action="{{ url_for('remove_phase', evenement_id=evenement.id, phase_id=phase.id) }}" 
+                                  style="display: inline;" onsubmit="return confirm('Retirer cette phase ?');">
+                                <button type="submit" class="btn btn-small btn-danger">Retirer</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p style="text-align: center; color: #7f8c8d; margin-top: 15px;">Aucune phase configurée pour cet événement.</p>
+    {% endif %}
+</div>
+
+<!-- Ajouter une phase -->
+<div class="card">
+    <h3>Ajouter une phase</h3>
+    {% if templates %}
+        <form method="POST" action="{{ url_for('add_phase', evenement_id=evenement.id) }}" style="padding: 0;">
+            <div class="form-group">
+                <label for="phase_id">Choisir un template de phase</label>
+                <select id="phase_id" name="phase_id" required>
+                    <option value="">-- Sélectionner une phase --</option>
+                    {% for template in templates %}
+                        <option value="{{ template.id }}">
+                            {{ template.nom }} ({{ template.format.nom if template.format else 'N/A' }} - {{ template.type.nom if template.type else 'N/A' }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-success">Ajouter cette phase</button>
+        </form>
+    {% else %}
+        <p style="color: #7f8c8d;">Aucun template de phase disponible. Contactez l'administrateur pour en créer.</p>
+    {% endif %}
+</div>
+
+<div style="margin-top: 20px;">
+    <a href="{{ url_for('view_evenement', evenement_id=evenement.id) }}" class="btn btn-secondary">← Retour à l'événement</a>
+</div>
+{% endblock %}

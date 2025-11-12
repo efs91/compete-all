@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Joueurs de la phase {{ phase.nom }} - Compete-All{% endblock %}
+
+{% block content %}
+<div class="header-actions">
+    <h1>Joueurs de la phase "{{ phase.nom }}" - {{ evenement.nom }}</h1>
+    <div>
+        <a href="{{ url_for('view_event_phases', evenement_id=evenement.id) }}" class="btn">Retour aux phases</a>
+    </div>
+</div>
+
+<div class="info-box">
+    <p>Gérez les joueurs participant à cette phase de l'événement. Vous pouvez ajouter des joueurs parmi ceux disponibles dans le système.</p>
+</div>
+
+<div class="flex-container">
+    <div class="players-list-section">
+        <h2>Joueurs inscrits ({{ players|length }})</h2>
+        
+        {% if players %}
+        <div class="players-list">
+            {% for player in players %}
+            <div class="player-card">
+                <div class="player-info">
+                    <h3>{{ player.joueur.username }}</h3>
+                    <p class="player-details">
+                        {{ player.joueur.prenom if player.joueur.prenom else '' }} 
+                        {{ player.joueur.nom if player.joueur.nom else '' }}
+                        {% if player.joueur.club %}
+                            <span class="player-club">({{ player.joueur.club }})</span>
+                        {% endif %}
+                    </p>
+                </div>
+                <form action="{{ url_for('delete_phase_player', evenement_id=evenement.id, phase_id=phase.id, joueur_id=player.joueur_id) }}" method="post" 
+                      onsubmit="return confirm('Êtes-vous sûr de vouloir retirer ce joueur de la phase?')">
+                    <button type="submit" class="btn btn-danger btn-sm">Retirer</button>
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty-message">Aucun joueur n'est inscrit à cette phase pour le moment.</p>
+        {% endif %}
+    </div>
+    
+    <div class="add-player-section">
+        <h2>Ajouter des joueurs</h2>
+        
+        {% if available_players %}
+        <form action="{{ url_for('add_phase_player', evenement_id=evenement.id, phase_id=phase.id) }}" method="post">
+            <div class="form-group">
+                <label for="joueur_id">Sélectionnez un joueur</label>
+                <select id="joueur_id" name="joueur_id" required>
+                    <option value="">-- Sélectionnez un joueur --</option>
+                    {% for player in available_players %}
+                    <option value="{{ player.id }}">
+                        {{ player.username }} 
+                        {% if player.prenom or player.nom %}
+                            ({{ player.prenom if player.prenom else '' }} {{ player.nom if player.nom else '' }})
+                        {% endif %}
+                        {% if player.club %}
+                            - {{ player.club }}
+                        {% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-success">Ajouter ce joueur</button>
+        </form>
+        {% else %}
+        <p class="empty-message">
+            Aucun joueur disponible pour inscription. Tous les joueurs du système sont déjà inscrits à cette phase ou aucun joueur n'existe.
+            <br><a href="{{ url_for('add_user') }}" class="btn">Créer un nouvel utilisateur</a>
+        </p>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+    .header-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .info-box {
+        background-color: #e3f2fd;
+        padding: 15px;
+        border-radius: 5px;
+        border-left: 4px solid #2196f3;
+        margin-bottom: 20px;
+    }
+    .flex-container {
+        display: flex;
+        gap: 20px;
+    }
+    .players-list-section, .add-player-section {
+        background: #f9f9f9;
+        border-radius: 5px;
+        padding: 20px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        flex: 1;
+    }
+    .player-card {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        padding: 10px 15px;
+        margin-bottom: 10px;
+    }
+    .player-info h3 {
+        margin: 0 0 5px 0;
+        font-size: 1.1rem;
+    }
+    .player-details {
+        margin: 0;
+        font-size: 0.9rem;
+        color: #666;
+    }
+    .player-club {
+        color: #3498db;
+    }
+    .btn-sm {
+        padding: 4px 8px;
+        font-size: 12px;
+    }
+    .empty-message {
+        text-align: center;
+        padding: 15px;
+        color: #666;
+        border: 1px dashed #ddd;
+        border-radius: 5px;
+    }
+    
+    @media (max-width: 768px) {
+        .flex-container {
+            flex-direction: column;
+        }
+    }
+</style>
+{% endblock %} 

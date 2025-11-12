@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Classements - {{ evenement.nom }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Classements - {{ evenement.nom }}</h2>
+</div>
+
+<!-- Classement général -->
+{% if classements %}
+    <div class="card">
+        <h3>Classement général</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Position</th>
+                    <th>Joueur</th>
+                    <th>Points</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in classements %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>{{ item.joueur }}</td>
+                    <td><strong>{{ item.points }}</strong></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endif %}
+
+<!-- Classements par phase -->
+{% if phases %}
+    {% for phase in phases %}
+        {% if phase.classements %}
+            <div class="card">
+                <h3>{{ phase.nom }}</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Position</th>
+                            <th>Joueur</th>
+                            <th>Points</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for classement in phase.classements %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>{{ classement.joueur }}</td>
+                            <td><strong>{{ classement.points }}</strong></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    {% endfor %}
+{% endif %}
+
+{% if not classements and not phases %}
+    <div class="card">
+        <p style="text-align: center; color: #7f8c8d;">
+            Aucun classement disponible pour le moment.<br>
+            Les classements seront calculés une fois les résultats saisis.
+        </p>
+    </div>
+{% endif %}
+
+<div style="margin-top: 20px;">
+    <a href="{{ url_for('view_evenement', evenement_id=evenement.id) }}" class="btn btn-secondary">← Retour à l'événement</a>
+</div>
+{% endblock %}

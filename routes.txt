@@ -1,0 +1,81 @@
+# Routes de l'API Compete-All
+
+## Événements
+GET    /evenements                    - Liste des événements
+POST   /evenements                    - Créer un événement
+GET    /evenements/{id}               - Détails d'un événement
+PUT    /evenements/{id}               - Modifier un événement
+DELETE /evenements/{id}               - Supprimer un événement
+
+## Phases
+GET    /evenements/{id}/phases        - Liste des phases d'un événement
+POST   /evenements/{id}/phases        - Créer une phase dans un événement
+GET    /phases/{id}                   - Détails d'une phase
+PUT    /phases/{id}                   - Modifier une phase
+DELETE /phases/{id}                   - Supprimer une phase
+GET    /phases/{id}/joueurs          - Liste des joueurs d'une phase
+POST   /phases/{id}/joueurs          - Ajouter des joueurs à une phase
+DELETE /phases/{id}/joueurs/{joueur_id} - Retirer un joueur d'une phase
+
+## Formats
+GET    /formats                       - Liste des formats
+POST   /formats                       - Créer un format
+GET    /formats/{id}                  - Détails d'un format
+PUT    /formats/{id}                  - Modifier un format
+DELETE /formats/{id}                  - Supprimer un format
+
+## Types
+GET    /types                         - Liste des types
+POST   /types                         - Créer un type
+GET    /types/{id}                    - Détails d'un type
+PUT    /types/{id}                    - Modifier un type
+DELETE /types/{id}                    - Supprimer un type
+
+## Joueurs
+GET    /joueurs                       - Liste des joueurs
+POST   /joueurs                       - Créer un joueur
+GET    /joueurs/{id}                  - Détails d'un joueur
+PUT    /joueurs/{id}                  - Modifier un joueur
+DELETE /joueurs/{id}                  - Supprimer un joueur
+
+## Équipes
+GET    /equipes                       - Liste des équipes
+POST   /equipes                       - Créer une équipe
+GET    /equipes/{id}                  - Détails d'une équipe
+PUT    /equipes/{id}                  - Modifier une équipe
+DELETE /equipes/{id}                  - Supprimer une équipe
+
+## Participants
+GET    /participants                  - Liste des participants
+POST   /participants                  - Créer un participant
+GET    /participants/{id}             - Détails d'un participant
+PUT    /participants/{id}             - Modifier un participant
+DELETE /participants/{id}             - Supprimer un participant
+
+## Rencontres
+GET    /phases/{id}/rencontres        - Liste des rencontres d'une phase
+POST   /phases/{id}/rencontres        - Créer une rencontre dans une phase
+GET    /rencontres/{id}               - Détails d'une rencontre
+PUT    /rencontres/{id}               - Modifier une rencontre
+DELETE /rencontres/{id}               - Supprimer une rencontre
+
+## Résultats
+GET    /rencontres/{id}/resultats     - Liste des résultats d'une rencontre
+POST   /rencontres/{id}/resultats     - Ajouter un résultat à une rencontre
+GET    /resultats/{id}                - Détails d'un résultat
+PUT    /resultats/{id}                - Modifier un résultat
+DELETE /resultats/{id}                - Supprimer un résultat
+
+## Règles
+GET    /regles                        - Liste des règles
+POST   /regles                        - Créer une règle
+GET    /regles/{sport}                - Détails d'une règle
+PUT    /regles/{sport}                - Modifier une règle
+DELETE /regles/{sport}                - Supprimer une règle
+
+## Classements
+GET    /classements                   - Liste des classements
+POST   /classements                   - Créer un classement
+GET    /classements/{id}              - Détails d'un classement
+PUT    /classements/{id}              - Modifier un classement
+DELETE /classements/{id}              - Supprimer un classement 

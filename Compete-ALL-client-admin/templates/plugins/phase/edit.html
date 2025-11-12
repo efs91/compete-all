@@ -1,0 +1,349 @@
+{% extends "base.html" %}
+
+{% block title %}Modifier {{ phase.nom }} - Compete-All{% endblock %}
+
+{% block content %}
+<div class="header-actions">
+    <h1>Modifier le template: {{ phase.nom }}</h1>
+    <a href="{{ url_for('view_phase', phase_id=phase_id) }}" class="btn">Retour aux détails</a>
+</div>
+
+<div class="form-container">
+    <form method="post" action="{{ url_for('edit_phase', phase_id=phase_id) }}">
+        <div class="form-section">
+            <h2>Informations de base</h2>
+            <div class="form-group">
+                <label for="nom">Nom du template *</label>
+                <input type="text" id="nom" name="nom" value="{{ phase.nom }}" required>
+                <p class="help-text">Exemple : Phase de poules, Éliminatoires, Finale...</p>
+            </div>
+            
+            <div class="form-group">
+                <label for="type">Type de phase *</label>
+                <select id="type" name="type" required>
+                    <option value="poule" {% if phase.type == 'poule' %}selected{% endif %}>Poule</option>
+                    <option value="elimination" {% if phase.type == 'elimination' %}selected{% endif %}>Élimination directe</option>
+                    <option value="round_robin" {% if phase.type == 'round_robin' %}selected{% endif %}>Round Robin</option>
+                    <option value="swiss" {% if phase.type == 'swiss' %}selected{% endif %}>Système Suisse</option>
+                    <option value="custom" {% if phase.type == 'custom' %}selected{% endif %}>Personnalisé</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="type_id">Type (détaillé) *</label>
+                <select id="type_id" name="type_id" required>
+                    <option value="">-- Sélectionnez un type --</option>
+                    {% for type_item in types %}
+                    <option value="{{ type_item.id }}" {% if phase and phase.type_id == type_item.id %}selected{% endif %}>
+                        {{ type_item.nom }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="format_id">Format *</label>
+                <select id="format_id" name="format_id" required>
+                    <option value="">-- Sélectionnez un format --</option>
+                    {% for format_item in formats %}
+                    <option value="{{ format_item.id }}" {% if phase and phase.format_id == format_item.id %}selected{% endif %}>
+                        {{ format_item.nom }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="ordre">Ordre d'exécution</label>
+                <input type="number" id="ordre" name="ordre" min="1" value="{{ phase.ordre }}">
+                <p class="help-text">Un nombre indiquant l'ordre dans lequel cette phase doit être jouée (1 = première phase)</p>
+            </div>
+            
+            <div class="form-group">
+                <label for="description">Description</label>
+                <textarea id="description" name="description" rows="4">{{ phase.description if phase.description else '' }}</textarea>
+            </div>
+        </div>
+        
+        <div class="form-section">
+            <h2>Configuration</h2>
+            
+            <div class="config-grid">
+                <div class="form-group">
+                    <label for="points_max">Points maximum par manche</label>
+                    <input type="number" id="points_max" name="points_max" min="1" value="{{ phase.configuration.points_max if phase and phase.configuration and phase.configuration.points_max else 5 }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="format_type">Format de la phase</label>
+                    <select id="format_type" name="format_type">
+                        <option value="poule" {% if phase and phase.configuration and phase.configuration.format_type == 'poule' %}selected{% endif %}>Poule</option>
+                        <option value="elimination" {% if phase and phase.configuration and phase.configuration.format_type == 'elimination' %}selected{% endif %}>Elimination</option>
+                        <option value="round_robin" {% if phase and phase.configuration and phase.configuration.format_type == 'round_robin' %}selected{% endif %}>Round Robin</option>
+                    </select>
+                </div>
+                
+                <div class="form-group checkbox-group">
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="limite_temps" name="limite_temps" {% if phase and phase.configuration and phase.configuration.limite_temps %}checked{% endif %}>
+                        <span class="checkmark"></span>
+                        Limite de temps
+                    </label>
+                </div>
+                
+                <div class="form-group checkbox-group">
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="limite_points" name="limite_points" {% if phase and phase.configuration and phase.configuration.limite_points %}checked{% endif %}>
+                        <span class="checkmark"></span>
+                        Limite de points
+                    </label>
+                </div>
+                
+                <div class="form-group">
+                    <label for="nombre_manches">Nombre de manches</label>
+                    <input type="number" id="nombre_manches" name="nombre_manches" min="1" value="{{ phase.configuration.nombre_manches if phase and phase.configuration and phase.configuration.nombre_manches else 1 }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="temps_par_manche">Temps par manche (minutes)</label>
+                    <input type="number" id="temps_par_manche" name="temps_par_manche" min="1" value="{{ phase.configuration.temps_par_manche if phase and phase.configuration and phase.configuration.temps_par_manche else 3 }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="max_joueurs_poule">Maximum de joueurs par poule</label>
+                    <input type="number" id="max_joueurs_poule" name="max_joueurs_poule" min="2" value="{{ phase.configuration.max_joueurs_poule if phase and phase.configuration and phase.configuration.max_joueurs_poule else 6 }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="min_joueurs_poule">Minimum de joueurs par poule</label>
+                    <input type="number" id="min_joueurs_poule" name="min_joueurs_poule" min="2" value="{{ phase.configuration.min_joueurs_poule if phase and phase.configuration and phase.configuration.min_joueurs_poule else 3 }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="ideal_joueurs_poule">Nombre idéal de joueurs par poule</label>
+                    <input type="number" id="ideal_joueurs_poule" name="ideal_joueurs_poule" min="2" value="{{ phase.configuration.ideal_joueurs_poule if phase and phase.configuration and phase.configuration.ideal_joueurs_poule else 5 }}">
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-section">
+            <h2>Scoring</h2>
+            
+            <div class="scoring-section">
+                <h3>Points par place</h3>
+                <div class="place-points-container">
+                    <div class="form-group">
+                        <label for="place_1">1ère place</label>
+                        <input type="number" id="place_1" name="place_1" value="{{ phase.scoring.placePoints['1'] if phase and phase.scoring and phase.scoring.placePoints and '1' in phase.scoring.placePoints else 10 }}">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="place_2">2ème place</label>
+                        <input type="number" id="place_2" name="place_2" value="{{ phase.scoring.placePoints['2'] if phase and phase.scoring and phase.scoring.placePoints and '2' in phase.scoring.placePoints else 5 }}">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="place_3">3ème place</label>
+                        <input type="number" id="place_3" name="place_3" value="{{ phase.scoring.placePoints['3'] if phase and phase.scoring and phase.scoring.placePoints and '3' in phase.scoring.placePoints else 0 }}">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="points_victoire">Points de victoire</label>
+                <input type="number" id="points_victoire" name="points_victoire" min="0" value="{{ phase.scoring.pointsVictoire if phase and phase.scoring and phase.scoring.pointsVictoire else 3 }}">
+            </div>
+            
+            <div class="form-group">
+                <label>Ordre de priorité pour départage</label>
+                <div class="priority-order">
+                    <div class="priority-item">
+                        <select name="priorite_1">
+                            <option value="Points de Victoire" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[0] == 'Points de Victoire' %}selected{% endif %}>Points de Victoire</option>
+                            <option value="Indice (GoalAverage)" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[0] == 'Indice (GoalAverage)' %}selected{% endif %}>Indice (GoalAverage)</option>
+                            <option value="Points mis" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[0] == 'Points mis' %}selected{% endif %}>Points mis</option>
+                            <option value="Points Pris" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[0] == 'Points Pris' %}selected{% endif %}>Points Pris</option>
+                        </select>
+                    </div>
+                    <div class="priority-item">
+                        <select name="priorite_2">
+                            <option value="Indice (GoalAverage)" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[1] == 'Indice (GoalAverage)' %}selected{% endif %}>Indice (GoalAverage)</option>
+                            <option value="Points de Victoire" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[1] == 'Points de Victoire' %}selected{% endif %}>Points de Victoire</option>
+                            <option value="Points mis" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[1] == 'Points mis' %}selected{% endif %}>Points mis</option>
+                            <option value="Points Pris" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[1] == 'Points Pris' %}selected{% endif %}>Points Pris</option>
+                        </select>
+                    </div>
+                    <div class="priority-item">
+                        <select name="priorite_3">
+                            <option value="Points mis" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[2] == 'Points mis' %}selected{% endif %}>Points mis</option>
+                            <option value="Points de Victoire" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[2] == 'Points de Victoire' %}selected{% endif %}>Points de Victoire</option>
+                            <option value="Indice (GoalAverage)" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[2] == 'Indice (GoalAverage)' %}selected{% endif %}>Indice (GoalAverage)</option>
+                            <option value="Points Pris" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[2] == 'Points Pris' %}selected{% endif %}>Points Pris</option>
+                        </select>
+                    </div>
+                    <div class="priority-item">
+                        <select name="priorite_4">
+                            <option value="Points Pris" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[3] == 'Points Pris' %}selected{% endif %}>Points Pris</option>
+                            <option value="Points de Victoire" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[3] == 'Points de Victoire' %}selected{% endif %}>Points de Victoire</option>
+                            <option value="Indice (GoalAverage)" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[3] == 'Indice (GoalAverage)' %}selected{% endif %}>Indice (GoalAverage)</option>
+                            <option value="Points mis" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[3] == 'Points mis' %}selected{% endif %}>Points mis</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>Points bonus (optionnel)</label>
+                <div id="bonus-points-container">
+                    {% if phase and phase.scoring and phase.scoring.bonusPoints %}
+                        {% for bonus in phase.scoring.bonusPoints %}
+                        <div class="bonus-point-row">
+                            <input type="text" name="bonus_condition[]" placeholder="Condition" value="{{ bonus.condition }}">
+                            <input type="number" name="bonus_points[]" placeholder="Points" value="{{ bonus.points }}">
+                            <button type="button" class="btn btn-sm remove-bonus" onclick="removeBonus(this)">-</button>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+                <button type="button" class="btn btn-sm" onclick="addBonus()">Ajouter un bonus</button>
+            </div>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-success">Mettre à jour</button>
+            <a href="{{ url_for('view_phase', phase_id=phase_id) }}" class="btn">Annuler</a>
+        </div>
+    </form>
+</div>
+
+<script>
+function addBonus() {
+    const container = document.getElementById('bonus-points-container');
+    const newRow = document.createElement('div');
+    newRow.className = 'bonus-point-row';
+    newRow.innerHTML = `
+        <input type="text" name="bonus_condition[]" placeholder="Condition">
+        <input type="number" name="bonus_points[]" placeholder="Points">
+        <button type="button" class="btn btn-sm remove-bonus" onclick="removeBonus(this)">-</button>
+    `;
+    container.appendChild(newRow);
+}
+
+function removeBonus(button) {
+    const row = button.parentNode;
+    row.parentNode.removeChild(row);
+}
+</script>
+
+<style>
+    .header-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .form-container {
+        background: #f9f9f9;
+        border-radius: 5px;
+        padding: 20px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        max-width: 900px;
+        margin: 0 auto;
+    }
+    .form-section {
+        margin-bottom: 30px;
+        border: 1px solid #e0e0e0;
+        border-radius: 5px;
+        padding: 20px;
+        background: white;
+    }
+    .form-section h2 {
+        margin-top: 0;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #eee;
+        font-size: 1.4rem;
+        color: #2c3e50;
+    }
+    .form-section h3 {
+        font-size: 1.2rem;
+        margin-top: 15px;
+        margin-bottom: 10px;
+    }
+    .form-group {
+        margin-bottom: 20px;
+    }
+    .help-text {
+        color: #666;
+        font-size: 0.9em;
+        margin-top: 5px;
+    }
+    .config-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 15px;
+    }
+    .checkbox-group {
+        margin-top: 26px;
+    }
+    .checkbox-container {
+        display: flex;
+        align-items: center;
+        cursor: pointer;
+    }
+    .place-points-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 15px;
+    }
+    .priority-order {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .priority-item {
+        display: flex;
+        align-items: center;
+    }
+    .priority-item:before {
+        content: attr(data-index);
+        margin-right: 10px;
+        font-weight: bold;
+    }
+    .bonus-point-row {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 10px;
+        align-items: center;
+    }
+    .bonus-point-row input[type="text"] {
+        flex: 2;
+    }
+    .bonus-point-row input[type="number"] {
+        flex: 1;
+    }
+    .remove-bonus {
+        flex: 0 0 auto;
+    }
+    .form-actions {
+        margin-top: 30px;
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+    }
+    /* Styling pour les inputs et selects */
+    input[type="text"], input[type="number"], select, textarea {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+    input[type="checkbox"] {
+        margin-right: 5px;
+    }
+    .btn-sm {
+        padding: 4px 8px;
+        font-size: 12px;
+    }
+</style>
+{% endblock %} 

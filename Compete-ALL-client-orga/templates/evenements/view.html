@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}{{ evenement.nom }} - Compete-All{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <h2>{{ evenement.nom }}</h2>
+            <p style="color: #7f8c8d;">
+                📅 Du {{ evenement.date_debut[:10] }} au {{ evenement.date_fin[:10] }}
+            </p>
+        </div>
+        <div class="actions">
+            <a href="{{ url_for('edit_evenement', evenement_id=evenement.id) }}" class="btn btn-secondary">✏️ Modifier</a>
+            <form method="POST" action="{{ url_for('delete_evenement', evenement_id=evenement.id) }}" 
+                  style="display: inline;" onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer cet événement ?');">
+                <button type="submit" class="btn btn-danger">🗑️ Supprimer</button>
+            </form>
+        </div>
+    </div>
+    
+    {% if evenement.description %}
+        <p style="margin-top: 15px;">{{ evenement.description }}</p>
+    {% endif %}
+</div>
+
+<!-- Statistiques -->
+<div class="stats">
+    <div class="stat-card">
+        <div class="number">{{ stats.phases_count }}</div>
+        <div class="label">Phases</div>
+    </div>
+    <div class="stat-card">
+        <div class="number">{{ stats.total_joueurs }}</div>
+        <div class="label">Joueurs inscrits</div>
+    </div>
+    <div class="stat-card">
+        <div class="number">{{ stats.rencontres_terminees }}/{{ stats.total_rencontres }}</div>
+        <div class="label">Rencontres terminées</div>
+    </div>
+</div>
+
+<!-- Actions rapides -->
+<div class="card">
+    <h3>Actions rapides</h3>
+    <div class="actions" style="margin-top: 15px;">
+        <a href="{{ url_for('manage_phases', evenement_id=evenement.id) }}" class="btn">Gérer les phases</a>
+        <a href="{{ url_for('manage_inscriptions', evenement_id=evenement.id) }}" class="btn">Gérer les inscriptions</a>
+        <a href="{{ url_for('view_classements', evenement_id=evenement.id) }}" class="btn">Voir les classements</a>
+    </div>
+</div>
+
+<!-- Liste des phases -->
+<div class="card">
+    <h3>Phases configurées</h3>
+    {% if phases %}
+        <table style="margin-top: 15px;">
+            <thead>
+                <tr>
+                    <th>Phase</th>
+                    <th>Format</th>
+                    <th>Type</th>
+                    <th>Joueurs</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for phase in phases %}
+                <tr>
+                    <td>{{ phase.nom }}</td>
+                    <td>{{ phase.format.nom if phase.format and phase.format.nom else 'N/A' }}</td>
+                    <td>{{ phase.type.nom if phase.type and phase.type.nom else 'N/A' }}</td>
+                    <td>{{ phase.joueurs|length if phase.joueurs else 0 }}</td>
+                    <td>
+                        <div class="actions">
+                            <a href="{{ url_for('view_rencontres', evenement_id=evenement.id, phase_id=phase.id) }}" 
+                               class="btn btn-small">Rencontres</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p style="text-align: center; color: #7f8c8d; margin-top: 15px;">
+            Aucune phase configurée.<br>
+            <a href="{{ url_for('manage_phases', evenement_id=evenement.id) }}" class="btn" style="margin-top: 10px;">Ajouter une phase</a>
+        </p>
+    {% endif %}
+</div>
+
+<div style="margin-top: 20px;">
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">← Retour aux événements</a>
+</div>
+{% endblock %}

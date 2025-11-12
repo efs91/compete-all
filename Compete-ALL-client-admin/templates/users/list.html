@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Utilisateurs - Compete-All{% endblock %}
+
+{% block content %}
+<div class="header-actions">
+    <h1>Gestion des utilisateurs</h1>
+    <a href="{{ url_for('add_user') }}" class="btn btn-success">Ajouter un utilisateur</a>
+</div>
+
+{% if users %}
+<table>
+    <thead>
+        <tr>
+            <th>Nom d'utilisateur</th>
+            <th>Nom</th>
+            <th>Prénom</th>
+            <th>Email</th>
+            <th>Club</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for user in users %}
+        <tr>
+            <td>{{ user.username }}</td>
+            <td>{{ user.nom if user.nom else '-' }}</td>
+            <td>{{ user.prenom if user.prenom else '-' }}</td>
+            <td>{{ user.email if user.email else '-' }}</td>
+            <td>{{ user.club if user.club else '-' }}</td>
+            <td>
+                <a href="{{ url_for('view_user', user_id=user.id) }}" class="btn">Voir</a>
+                <a href="{{ url_for('edit_user', user_id=user.id) }}" class="btn">Modifier</a>
+                <form action="{{ url_for('delete_user', user_id=user.id) }}" method="post" style="display: inline;">
+                    <button type="submit" class="btn btn-danger" onclick="return confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur?')">Supprimer</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>Aucun utilisateur trouvé.</p>
+{% endif %}
+
+<style>
+    .header-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .btn {
+        margin-right: 5px;
+    }
+</style>
+{% endblock %} 

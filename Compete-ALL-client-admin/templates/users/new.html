@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}Nouvel utilisateur - Compete-All{% endblock %}
+
+{% block content %}
+<div class="header-actions">
+    <h1>Ajouter un utilisateur</h1>
+    <a href="{{ url_for('list_users') }}" class="btn">Retour à la liste</a>
+</div>
+
+<div class="form-container">
+    <form method="post" action="{{ url_for('add_user') }}" enctype="multipart/form-data">
+        <div class="form-sections">
+            <div class="info-section">
+                <h2>Informations personnelles</h2>
+                
+                <div class="form-group">
+                    <label for="username">Nom d'utilisateur *</label>
+                    <input type="text" id="username" name="username" value="{{ user.username if user else '' }}" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="prenom">Prénom</label>
+                    <input type="text" id="prenom" name="prenom" value="{{ user.prenom if user and user.prenom else '' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="nom">Nom</label>
+                    <input type="text" id="nom" name="nom" value="{{ user.nom if user and user.nom else '' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" value="{{ user.email if user and user.email else '' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="telephone">Téléphone</label>
+                    <input type="tel" id="telephone" name="telephone" value="{{ user.telephone if user and user.telephone else '' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="nation">Nation</label>
+                    <input type="text" id="nation" name="nation" value="{{ user.nation if user and user.nation else '' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="club">Club</label>
+                    <input type="text" id="club" name="club" value="{{ user.club if user and user.club else '' }}">
+                </div>
+            </div>
+
+            <div class="photos-section">
+                <h2>Photos</h2>
+                
+                <div class="form-group">
+                    <h3>Ajouter des photos</h3>
+                    <input type="file" id="photos" name="photos" multiple accept="image/*">
+                    <p class="help-text">Vous pouvez sélectionner plusieurs photos (maintenez Ctrl pour sélectionner plusieurs fichiers).</p>
+                    <div class="file-preview"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-success">Sauvegarder</button>
+            <a href="{{ url_for('list_users') }}" class="btn">Annuler</a>
+        </div>
+    </form>
+</div>
+
+<style>
+    .header-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .form-container {
+        background: #f9f9f9;
+        border-radius: 5px;
+        padding: 20px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .form-sections {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 30px;
+    }
+    @media (min-width: 768px) {
+        .form-sections {
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+    h2 {
+        border-bottom: 1px solid #ddd;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+    }
+    h3 {
+        font-size: 1.1em;
+        margin-bottom: 10px;
+    }
+    .form-group {
+        margin-bottom: 15px;
+    }
+    .form-actions {
+        margin-top: 30px;
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+    }
+    .help-text {
+        font-size: 0.9em;
+        color: #666;
+        margin-top: 5px;
+        margin-bottom: 10px;
+    }
+    input[type="file"] {
+        border: 1px dashed #ccc;
+        padding: 10px;
+        width: 100%;
+        border-radius: 4px;
+    }
+    .file-preview {
+        margin-top: 10px;
+        min-height: 30px;
+    }
+</style>
+
+<script>
+    // Prévisualisation des fichiers sélectionnés
+    document.addEventListener('DOMContentLoaded', function() {
+        const fileInput = document.querySelector('input[type="file"]');
+        const filePreview = document.querySelector('.file-preview');
+        
+        fileInput.addEventListener('change', function() {
+            filePreview.innerHTML = '';
+            if (this.files.length > 0) {
+                const fileCount = document.createElement('p');
+                fileCount.textContent = `${this.files.length} fichier(s) sélectionné(s)`;
+                filePreview.appendChild(fileCount);
+                
+                const fileList = document.createElement('ul');
+                fileList.style.paddingLeft = '20px';
+                fileList.style.marginTop = '5px';
+                
+                for (let i = 0; i < this.files.length; i++) {
+                    const file = this.files[i];
+                    const listItem = document.createElement('li');
+                    listItem.textContent = file.name;
+                    fileList.appendChild(listItem);
+                }
+                
+                filePreview.appendChild(fileList);
+            }
+        });
+    });
+</script>
+{% endblock %} 

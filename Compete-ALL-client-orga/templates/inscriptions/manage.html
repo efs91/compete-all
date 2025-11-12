@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Gérer les inscriptions - {{ evenement.nom }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Inscriptions - {{ evenement.nom }}</h2>
+</div>
+
+{% if phases %}
+    {% for phase in phases %}
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h3>{{ phase.nom }}</h3>
+                <span class="badge badge-primary">{{ phase.joueurs|length }} inscrits</span>
+            </div>
+            
+            <!-- Liste des inscrits -->
+            {% if phase.joueurs %}
+                <table style="margin-top: 15px;">
+                    <thead>
+                        <tr>
+                            <th>Ordre</th>
+                            <th>Joueur</th>
+                            <th>Seed</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for inscription in phase.joueurs %}
+                        <tr>
+                            <td>{{ inscription.ordre_inscription }}</td>
+                            <td>{{ inscription.joueur.username if inscription.joueur else 'N/A' }}</td>
+                            <td>{{ inscription.seed if inscription.seed else '-' }}</td>
+                            <td>
+                                <form method="POST" 
+                                      action="{{ url_for('remove_inscription', evenement_id=evenement.id, phase_id=phase.id, joueur_id=inscription.joueur_id) }}" 
+                                      style="display: inline;">
+                                    <button type="submit" class="btn btn-small btn-danger">Retirer</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p style="color: #7f8c8d; margin-top: 10px;">Aucun joueur inscrit à cette phase.</p>
+            {% endif %}
+            
+            <!-- Ajouter un joueur -->
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+                <form method="POST" action="{{ url_for('add_inscription', evenement_id=evenement.id, phase_id=phase.id) }}" 
+                      style="display: flex; gap: 10px; align-items: flex-end; padding: 0;">
+                    <div class="form-group" style="flex: 1; margin: 0;">
+                        <label for="joueur_id_{{ phase.id }}">Ajouter un joueur</label>
+                        <select id="joueur_id_{{ phase.id }}" name="joueur_id" required>
+                            <option value="">-- Sélectionner un joueur --</option>
+                            {% for player in all_players %}
+                                {% set is_registered = namespace(value=false) %}
+                                {% for inscription in phase.joueurs %}
+                                    {% if inscription.joueur_id == player.id %}
+                                        {% set is_registered.value = true %}
+                                    {% endif %}
+                                {% endfor %}
+                                {% if not is_registered.value %}
+                                    <option value="{{ player.id }}">{{ player.username }}</option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-success">Ajouter</button>
+                </form>
+            </div>
+            
+            <!-- Générer les rencontres -->
+            {% if phase.joueurs|length >= 2 %}
+                <div style="margin-top: 15px; text-align: center;">
+                    <a href="{{ url_for('generate_rencontres', evenement_id=evenement.id, phase_id=phase.id) }}" 
+                       class="btn btn-success">🎲 Générer les rencontres</a>
+                </div>
+            {% endif %}
+        </div>
+    {% endfor %}
+{% else %}
+    <div class="card">
+        <p style="text-align: center; color: #7f8c8d;">
+            Aucune phase configurée pour cet événement.<br>
+            <a href="{{ url_for('manage_phases', evenement_id=evenement.id) }}" class="btn" style="margin-top: 15px;">Configurer les phases</a>
+        </p>
+    </div>
+{% endif %}
+
+<div style="margin-top: 20px;">
+    <a href="{{ url_for('view_evenement', evenement_id=evenement.id) }}" class="btn btn-secondary">← Retour à l'événement</a>
+</div>
+{% endblock %}

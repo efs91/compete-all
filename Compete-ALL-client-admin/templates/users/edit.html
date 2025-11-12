@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+
+{% block title %}Modifier {{ user.username }} - Compete-All{% endblock %}
+
+{% block content %}
+<div class="header-actions">
+    <h1>Modifier l'utilisateur: {{ user.username }}</h1>
+    <a href="{{ url_for('view_user', user_id=user_id) }}" class="btn">Retour au profil</a>
+</div>
+
+<div class="form-container">
+    <form method="post" action="{{ url_for('edit_user', user_id=user_id) }}" enctype="multipart/form-data">
+        <div class="form-sections">
+            <div class="info-section">
+                <h2>Informations personnelles</h2>
+                
+                <div class="form-group">
+                    <label for="username">Nom d'utilisateur *</label>
+                    <input type="text" id="username" name="username" value="{{ user.username }}" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="prenom">Prénom</label>
+                    <input type="text" id="prenom" name="prenom" value="{{ user.prenom if user.prenom else '' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="nom">Nom</label>
+                    <input type="text" id="nom" name="nom" value="{{ user.nom if user.nom else '' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" value="{{ user.email if user.email else '' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="telephone">Téléphone</label>
+                    <input type="tel" id="telephone" name="telephone" value="{{ user.telephone if user.telephone else '' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="nation">Nation</label>
+                    <input type="text" id="nation" name="nation" value="{{ user.nation if user.nation else '' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="club">Club</label>
+                    <input type="text" id="club" name="club" value="{{ user.club if user.club else '' }}">
+                </div>
+            </div>
+
+            <div class="photos-section">
+                <h2>Gestion des photos</h2>
+                
+                {% if user.photos and user.photos|length > 0 %}
+                <div class="form-group">
+                    <h3>Photos existantes</h3>
+                    <p class="help-text">Cochez les cases pour supprimer des photos.</p>
+                    <div class="photos-preview">
+                        {% for photo in user.photos %}
+                            {% if photo %}
+                            <div class="photo-item">
+                                <img src="{{ 'https://benribs.fr/compete-all' + photo }}" alt="Photo de {{ user.username }}">
+                                <input type="hidden" name="existing_photos" value="{{ photo }}">
+                                <label class="delete-checkbox">
+                                    <input type="checkbox" name="delete_photo_{{ loop.index0 }}" value="{{ photo }}">
+                                    Supprimer
+                                </label>
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                <div class="form-group" id="new_photos">
+                    <h3>Ajouter des photos</h3>
+                    <input type="file" id="new_photos" name="new_photos" multiple accept="image/*">
+                    <p class="help-text">Vous pouvez sélectionner plusieurs photos (maintenez Ctrl pour sélectionner plusieurs fichiers).</p>
+                    <div class="file-preview"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-success">Mettre à jour</button>
+            <a href="{{ url_for('view_user', user_id=user_id) }}" class="btn">Annuler</a>
+        </div>
+    </form>
+</div>
+
+<style>
+    .header-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .form-container {
+        background: #f9f9f9;
+        border-radius: 5px;
+        padding: 20px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .form-sections {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 30px;
+    }
+    @media (min-width: 768px) {
+        .form-sections {
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+    h2 {
+        border-bottom: 1px solid #ddd;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+    }
+    h3 {
+        font-size: 1.1em;
+        margin-bottom: 10px;
+    }
+    .form-group {
+        margin-bottom: 15px;
+    }
+    .form-actions {
+        margin-top: 30px;
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+    }
+    .photos-preview {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 10px;
+        margin-top: 10px;
+    }
+    .photo-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    .photo-item img {
+        width: 100%;
+        height: 120px;
+        border-radius: 4px;
+        object-fit: cover;
+        margin-bottom: 5px;
+    }
+    .delete-checkbox {
+        font-size: 0.9em;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+    .help-text {
+        font-size: 0.9em;
+        color: #666;
+        margin-top: 5px;
+        margin-bottom: 10px;
+    }
+    input[type="file"] {
+        border: 1px dashed #ccc;
+        padding: 10px;
+        width: 100%;
+        border-radius: 4px;
+    }
+    .file-preview {
+        margin-top: 10px;
+        min-height: 30px;
+    }
+</style>
+
+<script>
+    // Prévisualisation des fichiers sélectionnés
+    document.addEventListener('DOMContentLoaded', function() {
+        const fileInput = document.querySelector('input[type="file"]');
+        const filePreview = document.querySelector('.file-preview');
+        
+        fileInput.addEventListener('change', function() {
+            filePreview.innerHTML = '';
+            if (this.files.length > 0) {
+                const fileCount = document.createElement('p');
+                fileCount.textContent = `${this.files.length} fichier(s) sélectionné(s)`;
+                filePreview.appendChild(fileCount);
+                
+                const fileList = document.createElement('ul');
+                fileList.style.paddingLeft = '20px';
+                fileList.style.marginTop = '5px';
+                
+                for (let i = 0; i < this.files.length; i++) {
+                    const file = this.files[i];
+                    const listItem = document.createElement('li');
+                    listItem.textContent = file.name;
+                    fileList.appendChild(listItem);
+                }
+                
+                filePreview.appendChild(fileList);
+            }
+        });
+    });
+</script>
+{% endblock %} 

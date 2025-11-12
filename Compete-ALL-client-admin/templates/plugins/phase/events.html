@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Phases par événement - Compete-All{% endblock %}
+
+{% block content %}
+<div class="header-actions">
+    <h1>Phases par événement</h1>
+    <div>
+        <a href="{{ url_for('list_phases') }}" class="btn">Templates de phases</a>
+    </div>
+</div>
+
+<div class="info-box">
+    <p>Sélectionnez un événement pour gérer ses phases de compétition. Vous pourrez associer des templates de phases à des événements spécifiques.</p>
+</div>
+
+{% if evenements %}
+<div class="event-grid">
+    {% for evenement in evenements %}
+    <div class="event-card">
+        <div class="event-header">
+            <h2>{{ evenement.nom }}</h2>
+            <span class="event-dates">
+                {{ evenement.date_debut|replace('T', ' ')|replace('Z', '')|replace(':00.000', '') }} au {{ evenement.date_fin|replace('T', ' ')|replace('Z', '')|replace(':00.000', '') }}
+            </span>
+        </div>
+        <p class="event-description">{{ evenement.description if evenement.description else 'Aucune description' }}</p>
+        <a href="{{ url_for('view_event_phases', evenement_id=evenement.id) }}" class="btn">Gérer les phases</a>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-message">
+    <p>Aucun événement n'a été trouvé. Créez un événement pour pouvoir y associer des phases.</p>
+    <a href="{{ url_for('add_evenement') }}" class="btn btn-success">Créer un événement</a>
+</div>
+{% endif %}
+
+<style>
+    .header-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .info-box {
+        background-color: #e3f2fd;
+        padding: 15px;
+        border-radius: 5px;
+        border-left: 4px solid #2196f3;
+        margin-bottom: 20px;
+    }
+    .event-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 20px;
+    }
+    .event-card {
+        background: #f9f9f9;
+        border-radius: 5px;
+        padding: 20px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        display: flex;
+        flex-direction: column;
+    }
+    .event-header {
+        margin-bottom: 15px;
+    }
+    .event-header h2 {
+        margin: 0 0 5px 0;
+        font-size: 1.3rem;
+        color: #2c3e50;
+    }
+    .event-dates {
+        color: #666;
+        font-size: 0.9em;
+    }
+    .event-description {
+        flex-grow: 1;
+        margin-bottom: 15px;
+        color: #555;
+    }
+    .empty-message {
+        text-align: center;
+        padding: 30px;
+        background: #f9f9f9;
+        border-radius: 5px;
+    }
+    .empty-message p {
+        margin-bottom: 15px;
+        color: #666;
+    }
+</style>
+{% endblock %} 

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Liste des événements - Compete-All{% endblock %}
+
+{% block content %}
+<div class="header-actions">
+    <h1>Gestion des événements</h1>
+    <div>
+        <a href="{{ url_for('add_evenement') }}" class="btn btn-success">Nouvel événement</a>
+    </div>
+</div>
+
+<div class="info-box">
+    Ce module vous permet de gérer les événements sportifs (tournois, championnats, compétitions...).
+</div>
+
+{% if evenements %}
+<table>
+    <thead>
+        <tr>
+            <th>Nom</th>
+            <th>Date de début</th>
+            <th>Date de fin</th>
+            <th>Description</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for evenement in evenements %}
+        <tr>
+            <td>{{ evenement.nom }}</td>
+            <td>{{ evenement.date_debut|replace('T', ' ')|replace('Z', '') }}</td>
+            <td>{{ evenement.date_fin|replace('T', ' ')|replace('Z', '') }}</td>
+            <td>{{ evenement.description }}</td>
+            <td class="actions">
+                <a href="{{ url_for('view_evenement', evenement_id=evenement.id) }}" class="btn btn-sm">Détails</a>
+                <a href="{{ url_for('edit_evenement', evenement_id=evenement.id) }}" class="btn btn-sm">Modifier</a>
+                <form action="{{ url_for('delete_evenement', evenement_id=evenement.id) }}" method="post" 
+                      style="display:inline" onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer cet événement?')">
+                    <button type="submit" class="btn btn-danger btn-sm">Supprimer</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>Aucun événement n'a été trouvé.</p>
+{% endif %}
+
+<style>
+    .header-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .info-box {
+        background-color: #e3f2fd;
+        padding: 15px;
+        border-radius: 5px;
+        border-left: 4px solid #2196f3;
+        margin-bottom: 20px;
+    }
+    td.actions {
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+    }
+    .btn-sm {
+        padding: 4px 8px;
+        font-size: 12px;
+    }
+</style>
+{% endblock %} 

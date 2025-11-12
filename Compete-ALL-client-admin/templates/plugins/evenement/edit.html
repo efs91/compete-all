@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}Modifier {{ evenement.nom }} - Compete-All{% endblock %}
+
+{% block content %}
+<div class="header-actions">
+    <h1>Modifier l'événement: {{ evenement.nom }}</h1>
+    <a href="{{ url_for('view_evenement', evenement_id=evenement_id) }}" class="btn">Retour aux détails</a>
+</div>
+
+<div class="form-container">
+    <form method="post" action="{{ url_for('edit_evenement', evenement_id=evenement_id) }}">
+        <div class="form-group">
+            <label for="nom">Nom de l'événement *</label>
+            <input type="text" id="nom" name="nom" value="{{ evenement.nom }}" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="date_debut">Date de début *</label>
+            <input type="datetime-local" id="date_debut" name="date_debut" 
+                  value="{{ evenement.date_debut|replace('Z', '')|replace(':00.000', '') if evenement.date_debut else '' }}" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="date_fin">Date de fin *</label>
+            <input type="datetime-local" id="date_fin" name="date_fin" 
+                  value="{{ evenement.date_fin|replace('Z', '')|replace(':00.000', '') if evenement.date_fin else '' }}" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" rows="4">{{ evenement.description if evenement.description else '' }}</textarea>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-success">Mettre à jour</button>
+            <a href="{{ url_for('view_evenement', evenement_id=evenement_id) }}" class="btn">Annuler</a>
+        </div>
+    </form>
+</div>
+
+<style>
+    .header-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .form-container {
+        background: #f9f9f9;
+        border-radius: 5px;
+        padding: 20px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        max-width: 800px;
+        margin: 0 auto;
+    }
+    .form-group {
+        margin-bottom: 20px;
+    }
+    .form-actions {
+        margin-top: 30px;
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+    }
+    textarea {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-sizing: border-box;
+        font-family: inherit;
+        font-size: inherit;
+    }
+    input[type="datetime-local"] {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+</style>
+
+<script>
+    // Format des dates pour être compatibles avec l'entrée datetime-local
+    document.addEventListener('DOMContentLoaded', function() {
+        function formatDateTimeForInput(dateString) {
+            if (!dateString) return '';
+            
+            // Supprimer le Z et tout ce qui suit les secondes
+            dateString = dateString.replace('Z', '').replace(/\.\d+$/, '');
+            
+            // Formater pour que ce soit compatible avec datetime-local
+            return dateString;
+        }
+        
+        const dateDebutInput = document.getElementById('date_debut');
+        const dateFinInput = document.getElementById('date_fin');
+        
+        if (dateDebutInput.value) {
+            dateDebutInput.value = formatDateTimeForInput(dateDebutInput.value);
+        }
+        
+        if (dateFinInput.value) {
+            dateFinInput.value = formatDateTimeForInput(dateFinInput.value);
+        }
+    });
+</script>
+{% endblock %} 

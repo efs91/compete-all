@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Mes Événements - Compete-All{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2>Mes Événements</h2>
+        <a href="{{ url_for('create_evenement') }}" class="btn btn-success">+ Nouvel événement</a>
+    </div>
+</div>
+
+{% if evenements %}
+    <div class="grid">
+        {% for evenement in evenements %}
+            <div class="card">
+                <h3>{{ evenement.nom }}</h3>
+                <p style="color: #7f8c8d; margin: 10px 0;">
+                    📅 Du {{ evenement.date_debut[:10] }} au {{ evenement.date_fin[:10] }}
+                </p>
+                {% if evenement.description %}
+                    <p style="margin: 10px 0;">{{ evenement.description }}</p>
+                {% endif %}
+                
+                <div class="actions" style="margin-top: 15px;">
+                    <a href="{{ url_for('view_evenement', evenement_id=evenement.id) }}" class="btn btn-small">Gérer</a>
+                    <a href="{{ url_for('manage_phases', evenement_id=evenement.id) }}" class="btn btn-small btn-secondary">Phases</a>
+                    <a href="{{ url_for('manage_inscriptions', evenement_id=evenement.id) }}" class="btn btn-small btn-secondary">Inscrits</a>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="card">
+        <p style="text-align: center; color: #7f8c8d;">
+            Aucun événement créé pour le moment.<br>
+            <a href="{{ url_for('create_evenement') }}" class="btn btn-success" style="margin-top: 15px;">Créer mon premier événement</a>
+        </p>
+    </div>
+{% endif %}
+{% endblock %}

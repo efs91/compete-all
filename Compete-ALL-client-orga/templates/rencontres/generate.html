@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Générer les rencontres - {{ phase.nom }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Générer les rencontres</h2>
+    <p><strong>Événement:</strong> {{ evenement.nom }}</p>
+    <p><strong>Phase:</strong> {{ phase.nom }}</p>
+</div>
+
+<div class="card">
+    <h3>Joueurs inscrits ({{ joueurs|length }})</h3>
+    <ul>
+        {% for joueur in joueurs %}
+            <li>{{ joueur.joueur.username if joueur.joueur else 'N/A' }}</li>
+        {% endfor %}
+    </ul>
+</div>
+
+<div class="card">
+    <h3>Configuration</h3>
+    <p><strong>Format:</strong> {{ phase.format.nom if phase.format else 'N/A' }}</p>
+    <p><strong>Type:</strong> {{ phase.type.nom if phase.type else 'N/A' }}</p>
+    
+    {% set type_nom = phase.type.nom if phase.type and phase.type.nom else phase.type if phase.type else 'N/A' %}
+    {% if type_nom == 'Groupe' %}
+        <p>🔄 Génération de toutes les rencontres (tous contre tous)</p>
+        <p>Nombre de rencontres: {{ (joueurs|length * (joueurs|length - 1)) // 2 }}</p>
+    {% elif type_nom == 'Match' %}
+        <p>🏆 Génération d'un bracket d'élimination directe</p>
+    {% else %}
+        <p>📋 Génération des rencontres selon la configuration</p>
+        <p>Nombre de rencontres: {{ (joueurs|length * (joueurs|length - 1)) // 2 }}</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <form method="POST">
+        <p style="margin-bottom: 20px;">Êtes-vous sûr de vouloir générer les rencontres ? Cette action créera toutes les rencontres nécessaires.</p>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-success">✅ Générer les rencontres</button>
+            <a href="{{ url_for('manage_inscriptions', evenement_id=evenement.id) }}" class="btn btn-secondary">Annuler</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

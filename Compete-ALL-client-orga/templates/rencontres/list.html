@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Rencontres - {{ phase.nom }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Rencontres - {{ phase.nom }}</h2>
+    <p><strong>Événement:</strong> {{ evenement.nom }}</p>
+</div>
+
+{% if rencontres %}
+    <div class="card">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Participants</th>
+                    <th>Statut</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rencontre in rencontres %}
+                <tr>
+                    <td>Match {{ loop.index }}</td>
+                    <td>
+                        {% if rencontre.participants_details %}
+                            {% for participant in rencontre.participants_details %}
+                                <strong>{{ participant.username }}</strong>
+                                {% if participant.club %}<small>({{ participant.club }})</small>{% endif %}
+                                {% if not loop.last %} <strong>vs</strong> {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            <em style="color: #7f8c8d;">Participants non définis</em>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if rencontre.resultats %}
+                            <span class="badge badge-success">✓ Terminée</span>
+                        {% else %}
+                            <span class="badge badge-warning">En attente</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="actions">
+                            <a href="{{ url_for('edit_resultats', rencontre_id=rencontre.id) }}" 
+                               class="btn btn-small">
+                                {% if rencontre.resultats %}Voir résultats{% else %}Saisir résultats{% endif %}
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% else %}
+    <div class="card">
+        <p style="text-align: center; color: #7f8c8d;">
+            Aucune rencontre générée pour cette phase.<br>
+            <a href="{{ url_for('generate_rencontres', evenement_id=evenement.id, phase_id=phase.id) }}" 
+               class="btn btn-success" style="margin-top: 15px;">
+                Générer les rencontres
+            </a>
+        </p>
+    </div>
+{% endif %}
+
+<div style="margin-top: 20px;">
+    <a href="{{ url_for('view_evenement', evenement_id=evenement.id) }}" class="btn btn-secondary">← Retour à l'événement</a>
+</div>
+{% endblock %}

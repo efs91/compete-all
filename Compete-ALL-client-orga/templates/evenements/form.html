@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if mode == 'create' %}Nouvel événement{% else %}Modifier l'événement{% endif %} - Compete-All
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>{% if mode == 'create' %}Créer un nouvel événement{% else %}Modifier l'événement{% endif %}</h2>
+    
+    <form method="POST">
+        <div class="form-group">
+            <label for="nom">Nom de l'événement *</label>
+            <input type="text" id="nom" name="nom" value="{{ evenement.nom or '' }}" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="date_debut">Date de début *</label>
+            <input type="datetime-local" id="date_debut" name="date_debut" 
+                   value="{{ evenement.date_debut[:16] if evenement.date_debut else '' }}" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="date_fin">Date de fin *</label>
+            <input type="datetime-local" id="date_fin" name="date_fin" 
+                   value="{{ evenement.date_fin[:16] if evenement.date_fin else '' }}" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description">{{ evenement.description or '' }}</textarea>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-success">
+                {% if mode == 'create' %}Créer{% else %}Mettre à jour{% endif %}
+            </button>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Annuler</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Nouvel événement - Compete-All{% endblock %}
+
+{% block content %}
+<div class="header-actions">
+    <h1>Créer un nouvel événement</h1>
+    <a href="{{ url_for('list_evenements') }}" class="btn">Retour à la liste</a>
+</div>
+
+<div class="form-container">
+    <form method="post" action="{{ url_for('add_evenement') }}">
+        <div class="form-group">
+            <label for="nom">Nom de l'événement *</label>
+            <input type="text" id="nom" name="nom" value="{{ evenement.nom if evenement else '' }}" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="date_debut">Date de début *</label>
+            <input type="datetime-local" id="date_debut" name="date_debut" value="{{ evenement.date_debut if evenement else '' }}" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="date_fin">Date de fin *</label>
+            <input type="datetime-local" id="date_fin" name="date_fin" value="{{ evenement.date_fin if evenement else '' }}" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" rows="4">{{ evenement.description if evenement else '' }}</textarea>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-success">Créer l'événement</button>
+            <a href="{{ url_for('list_evenements') }}" class="btn">Annuler</a>
+        </div>
+    </form>
+</div>
+
+<style>
+    .header-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .form-container {
+        background: #f9f9f9;
+        border-radius: 5px;
+        padding: 20px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        max-width: 800px;
+        margin: 0 auto;
+    }
+    .form-group {
+        margin-bottom: 20px;
+    }
+    .form-actions {
+        margin-top: 30px;
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+    }
+    textarea {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-sizing: border-box;
+        font-family: inherit;
+        font-size: inherit;
+    }
+    input[type="datetime-local"] {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+</style>
+{% endblock %} 

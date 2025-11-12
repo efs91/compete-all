@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}Phases de {{ evenement.nom }} - Compete-All{% endblock %}
+
+{% block content %}
+<div class="header-actions">
+    <h1>Phases de l'événement: {{ evenement.nom }}</h1>
+    <div>
+        <a href="{{ url_for('list_event_phases') }}" class="btn">Retour aux événements</a>
+    </div>
+</div>
+
+<div class="info-box">
+    <p>Gérez les phases de compétition pour cet événement. Vous pouvez ajouter des phases à partir des templates disponibles.</p>
+</div>
+
+<div class="event-info">
+    <h2>Informations sur l'événement</h2>
+    <table>
+        <tr>
+            <th>Nom</th>
+            <td>{{ evenement.nom }}</td>
+        </tr>
+        <tr>
+            <th>Date de début</th>
+            <td>{{ evenement.date_debut|replace('T', ' ')|replace('Z', '')|replace(':00.000', '') }}</td>
+        </tr>
+        <tr>
+            <th>Date de fin</th>
+            <td>{{ evenement.date_fin|replace('T', ' ')|replace('Z', '')|replace(':00.000', '') }}</td>
+        </tr>
+        <tr>
+            <th>Description</th>
+            <td>{{ evenement.description if evenement.description else '-' }}</td>
+        </tr>
+    </table>
+</div>
+
+<!-- Section pour ajouter une phase -->
+<div class="add-phase-section">
+    <h2>Ajouter une phase</h2>
+    
+    {% if templates %}
+    <form action="{{ url_for('add_event_phase', evenement_id=evenement.id) }}" method="post" class="add-phase-form">
+        <div class="form-group">
+            <label for="phase_id">Sélectionnez un template de phase</label>
+            <select id="phase_id" name="phase_id" required>
+                <option value="">-- Sélectionnez un template --</option>
+                {% for template in templates %}
+                <option value="{{ template.id }}">{{ template.nom }} ({{ template.type }}, ordre: {{ template.ordre }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn-success">Ajouter cette phase</button>
+    </form>
+    {% else %}
+    <div class="empty-message">
+        <p>Aucun template de phase n'est disponible. Créez un template avant d'ajouter des phases à cet événement.</p>
+        <a href="{{ url_for('add_phase') }}" class="btn btn-success">Créer un template</a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Liste des phases existantes -->
+<div class="phases-section">
+    <h2>Phases existantes</h2>
+    
+    {% if phases %}
+    <div class="phases-list">
+        {% for phase in phases %}
+        <div class="phase-card">
+            <div class="phase-info">
+                <h3>{{ phase.nom }}</h3>
+                <p class="phase-type">Type: {{ phase.type }}</p>
+                <p class="phase-order">Ordre: {{ phase.ordre }}</p>
+                <p class="phase-desc">{{ phase.description if phase.description else 'Aucune description' }}</p>
+            </div>
+            <div class="phase-actions">
+                <a href="{{ url_for('view_phase_players', evenement_id=evenement.id, phase_id=phase.id) }}" class="btn">Gérer les joueurs</a>
+                <form action="{{ url_for('delete_event_phase', evenement_id=evenement.id, phase_id=phase.id) }}" method="post" 
+                      style="display:inline" onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer cette phase de l\'événement? Les joueurs inscrits à cette phase seront désinscrits.')">
+                    <button type="submit" class="btn btn-danger">Supprimer</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty-phases">Aucune phase n'a encore été ajoutée à cet événement.</p>
+    {% endif %}
+</div>
+
+<style>
+    .header-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .info-box {
+        background-color: #e3f2fd;
+        padding: 15px;
+        border-radius: 5px;
+        border-left: 4px solid #2196f3;
+        margin-bottom: 20px;
+    }
+    .event-info {
+        background: #f9f9f9;
+        border-radius: 5px;
+        padding: 20px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    .add-phase-section {
+        background: #f9f9f9;
+        border-radius: 5px;
+        padding: 20px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    .add-phase-form {
+        max-width: 600px;
+    }
+    .phases-section {
+        background: #f9f9f9;
+        border-radius: 5px;
+        padding: 20px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .phases-list {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 15px;
+        margin-top: 15px;
+    }
+    .phase-card {
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        padding: 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: white;
+    }
+    .phase-info h3 {
+        margin: 0 0 5px 0;
+        color: #2c3e50;
+    }
+    .phase-type, .phase-order {
+        color: #666;
+        margin: 0 0 5px 0;
+        font-size: 0.9em;
+    }
+    .phase-desc {
+        margin: 5px 0 0 0;
+        font-size: 0.95em;
+    }
+    .phase-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .empty-message, .empty-phases {
+        text-align: center;
+        padding: 20px;
+        color: #666;
+        border: 1px dashed #ddd;
+        border-radius: 5px;
+        margin-top: 10px;
+    }
+</style>
+{% endblock %} 

@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}{{ phase.nom }} - Template de phase - Compete-All{% endblock %}
+
+{% block content %}
+<div class="header-actions">
+    <h1>{{ phase.nom }}</h1>
+    <div>
+        <a href="{{ url_for('edit_phase', phase_id=phase.id) }}" class="btn">Modifier</a>
+        <a href="{{ url_for('list_phases') }}" class="btn">Retour à la liste</a>
+    </div>
+</div>
+
+<div class="phase-details">
+    <div class="phase-info">
+        <h2>Informations sur le template</h2>
+        <table>
+            <tr>
+                <th>Nom</th>
+                <td>{{ phase.nom }}</td>
+            </tr>
+            <tr>
+                <th>Type</th>
+                <td>{{ phase.type }}</td>
+            </tr>
+            <tr>
+                <th>Type détaillé</th>
+                <td>{{ type_info.nom if type_info else '-' }}</td>
+            </tr>
+            <tr>
+                <th>Format</th>
+                <td>{{ format_info.nom if format_info else '-' }}</td>
+            </tr>
+            <tr>
+                <th>Ordre</th>
+                <td>{{ phase.ordre }}</td>
+            </tr>
+            <tr>
+                <th>Description</th>
+                <td>{{ phase.description if phase.description else '-' }}</td>
+            </tr>
+            <tr>
+                <th>ID</th>
+                <td><code>{{ phase.id }}</code></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="phase-config">
+        <h2>Configuration</h2>
+        {% if phase.configuration %}
+        <table>
+            <tr>
+                <th>Points maximum par manche</th>
+                <td>{{ phase.configuration.points_max }}</td>
+            </tr>
+            <tr>
+                <th>Format</th>
+                <td>{{ phase.configuration.format_type }}</td>
+            </tr>
+            <tr>
+                <th>Limite de temps</th>
+                <td>{{ 'Oui' if phase.configuration.limite_temps else 'Non' }}</td>
+            </tr>
+            <tr>
+                <th>Limite de points</th>
+                <td>{{ 'Oui' if phase.configuration.limite_points else 'Non' }}</td>
+            </tr>
+            <tr>
+                <th>Nombre de manches</th>
+                <td>{{ phase.configuration.nombre_manches }}</td>
+            </tr>
+            <tr>
+                <th>Temps par manche</th>
+                <td>{{ phase.configuration.temps_par_manche }} minutes</td>
+            </tr>
+            <tr>
+                <th>Max joueurs par poule</th>
+                <td>{{ phase.configuration.max_joueurs_poule }}</td>
+            </tr>
+            <tr>
+                <th>Min joueurs par poule</th>
+                <td>{{ phase.configuration.min_joueurs_poule }}</td>
+            </tr>
+            <tr>
+                <th>Joueurs idéal par poule</th>
+                <td>{{ phase.configuration.ideal_joueurs_poule }}</td>
+            </tr>
+        </table>
+        {% else %}
+        <p class="no-data">Aucune configuration définie.</p>
+        {% endif %}
+    </div>
+
+    <div class="phase-scoring">
+        <h2>Scoring</h2>
+        {% if phase.scoring %}
+        <div class="scoring-section">
+            <h3>Points par place</h3>
+            <table class="compact-table">
+                <tr>
+                    <th>1ère place</th>
+                    <td>{{ phase.scoring.placePoints['1'] if phase.scoring.placePoints and '1' in phase.scoring.placePoints else '-' }}</td>
+                </tr>
+                <tr>
+                    <th>2ème place</th>
+                    <td>{{ phase.scoring.placePoints['2'] if phase.scoring.placePoints and '2' in phase.scoring.placePoints else '-' }}</td>
+                </tr>
+                <tr>
+                    <th>3ème place</th>
+                    <td>{{ phase.scoring.placePoints['3'] if phase.scoring.placePoints and '3' in phase.scoring.placePoints else '-' }}</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="scoring-section">
+            <h3>Points de victoire</h3>
+            <p>{{ phase.scoring.pointsVictoire }}</p>
+        </div>
+
+        <div class="scoring-section">
+            <h3>Ordre de priorité</h3>
+            {% if phase.scoring.ordrePriorite %}
+            <ol>
+                {% for critere in phase.scoring.ordrePriorite %}
+                <li>{{ critere }}</li>
+                {% endfor %}
+            </ol>
+            {% else %}
+            <p>Aucun ordre de priorité défini.</p>
+            {% endif %}
+        </div>
+
+        <div class="scoring-section">
+            <h3>Points bonus</h3>
+            {% if phase.scoring.bonusPoints and phase.scoring.bonusPoints|length > 0 %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Condition</th>
+                        <th>Points</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for bonus in phase.scoring.bonusPoints %}
+                    <tr>
+                        <td>{{ bonus.condition }}</td>
+                        <td>{{ bonus.points }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p>Aucun point bonus défini.</p>
+            {% endif %}
+        </div>
+        {% else %}
+        <p class="no-data">Aucun système de scoring défini.</p>
+        {% endif %}
+    </div>
+
+    <div class="phase-usage">
+        <h2>Utilisation de ce template</h2>
+        <p>Ce template peut être associé à différents événements pour créer des phases de compétition.</p>
+        <a href="{{ url_for('list_event_phases') }}" class="btn">Voir les événements</a>
+    </div>
+
+    <form action="{{ url_for('delete_phase', phase_id=phase.id) }}" method="post" class="delete-form">
+        <button type="submit" class="btn btn-danger" onclick="return confirm('Êtes-vous sûr de vouloir supprimer ce template de phase? Cette action est irréversible et peut affecter les événements associés.')">Supprimer ce template</button>
+    </form>
+</div>
+
+<style>
+    .header-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .phase-details {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+    .phase-info, .phase-usage, .phase-config, .phase-scoring {
+        background: #f9f9f9;
+        border-radius: 5px;
+        padding: 20px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .delete-form {
+        margin-top: 20px;
+    }
+    code {
+        background-color: #f1f1f1;
+        padding: 2px 5px;
+        border-radius: 3px;
+        font-family: monospace;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    th, td {
+        padding: 8px 12px;
+        text-align: left;
+        border-bottom: 1px solid #eee;
+    }
+    th {
+        width: 30%;
+        font-weight: bold;
+        color: #2c3e50;
+    }
+    .compact-table th, .compact-table td {
+        padding: 5px 10px;
+    }
+    .scoring-section {
+        margin-bottom: 20px;
+    }
+    .scoring-section h3 {
+        font-size: 1.1rem;
+        margin-bottom: 10px;
+        color: #2c3e50;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 5px;
+    }
+    .no-data {
+        color: #777;
+        font-style: italic;
+    }
+</style>
+{% endblock %} 

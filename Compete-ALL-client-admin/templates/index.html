@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Accueil - Compete-All{% endblock %}
+
+{% block content %}
+<h1>Bienvenue sur Compete-All</h1>
+
+<div class="card">
+    <p>Compete-All est une application modulaire permettant de gérer tout type de compétitions, tournois, championnats, concours ou événements similaires.</p>
+    
+    <h2>Fonctionnalités principales</h2>
+    <ul>
+        <li><strong>Gestion des utilisateurs</strong> - Ajouter, modifier et supprimer des participants</li>
+        <li><strong>Système de plugins</strong> - Étendre les fonctionnalités avec des modules additionnels</li>
+    </ul>
+    
+    <h2>Commencer</h2>
+    <div class="buttons">
+        <a href="{{ url_for('list_users') }}" class="btn">Gérer les utilisateurs</a>
+        <a href="{{ url_for('list_plugins') }}" class="btn">Gérer les plugins</a>
+        <a href="{{ url_for('list_types') }}" class="btn">Gérer les types de phases</a>
+    </div>
+</div>
+
+<style>
+    .card {
+        background: #f9f9f9;
+        border-radius: 5px;
+        padding: 20px;
+        margin: 20px 0;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .buttons {
+        margin-top: 20px;
+    }
+    .buttons .btn {
+        margin-right: 10px;
+    }
+</style>
+{% endblock %} 

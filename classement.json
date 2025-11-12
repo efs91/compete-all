@@ -1,0 +1,15 @@
+{
+    "nom": "Classement Initial",
+    "points": [
+        {
+            "joueur_id": "bdd087eb-77d6-4913-8400-15ca5666b850",
+            "points": 1500,
+            "rang": 1
+        },
+        {
+            "joueur_id": "db52d42f-6ad2-4ef5-9e11-843efc5b2223",
+            "points": 1450,
+            "rang": 2
+        }
+    ]
+} 

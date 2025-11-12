@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Modifier' if type.id else 'Nouveau' }} type{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>{{ 'Modifier' if type.id else 'Nouveau' }} type de phase</h2>
+    
+    <form method="POST">
+        <div class="form-group">
+            <label for="nom">Nom du type *</label>
+            <input type="text" id="nom" name="nom" value="{{ type.nom if type else '' }}" required>
+            <small>Ex: Match Simple, Course, Poule, Élimination Directe</small>
+        </div>
+        
+        <div class="form-group">
+            <label>Configuration des résultats *</label>
+            <div style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin-top: 10px;">
+                <p style="margin-top: 0; color: #666; font-size: 0.9em;">
+                    Sélectionnez les champs de résultats attendus pour ce type de phase :
+                </p>
+                
+                <label style="display: block; margin: 10px 0;">
+                    <input type="checkbox" name="resultats_classement" 
+                           {% if type.resultats_config and type.resultats_config.classement %}checked{% endif %}>
+                    <strong>Classement</strong> - Position finale (1er, 2ème, 3ème...)
+                    <br><small style="margin-left: 25px; color: #666;">Utile pour : courses, tournois avec classement</small>
+                </label>
+                
+                <label style="display: block; margin: 10px 0;">
+                    <input type="checkbox" name="resultats_points" 
+                           {% if type.resultats_config and type.resultats_config.points %}checked{% endif %}>
+                    <strong>Points</strong> - Score obtenu par chaque participant
+                    <br><small style="margin-left: 25px; color: #666;">Utile pour : matchs, jeux avec score</small>
+                </label>
+                
+                <label style="display: block; margin: 10px 0;">
+                    <input type="checkbox" name="resultats_actions" 
+                           {% if type.resultats_config and type.resultats_config.actions %}checked{% endif %}>
+                    <strong>Actions</strong> - Détails supplémentaires (buts, temps, cartons...)
+                    <br><small style="margin-left: 25px; color: #666;">Utile pour : sports avec statistiques détaillées</small>
+                </label>
+            </div>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-success">{{ 'Modifier' if type.id else 'Créer' }}</button>
+            <a href="{{ url_for('list_types') }}" class="btn btn-secondary">Annuler</a>
+        </div>
+    </form>
+</div>
+
+<style>
+    .form-group {
+        margin-bottom: 20px;
+    }
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+    }
+    .form-group input[type="text"] {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+    }
+    .form-group small {
+        display: block;
+        margin-top: 5px;
+        color: #666;
+        font-size: 0.85em;
+    }
+    .actions {
+        margin-top: 30px;
+        display: flex;
+        gap: 10px;
+    }
+</style>
+{% endblock %}

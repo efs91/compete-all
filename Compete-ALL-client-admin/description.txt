@@ -1,0 +1,47 @@
+Description du projet : 
+
+Notre application doit permettre la gestion complete et modulaire de tout type de compétition/tournois/championnat/concours
+
+On appelle ça un évènement
+Un évènement a un id, un nom et des dates de début et fin
+Un évènement contient des phases qui ont : un id, un nom, un format, un type, une configuration et l'id de l'évènement auquel elle appartient
+Chaque phase va comporter des rencontres (match, gala, ...)
+Chaque rencontre va généré un résultat
+les résultats permettront un classement.
+Les classements des phases s'ajoutent pour creer le classement générale
+L'evenement est fini quand toutes les phases sont terminé et qu'on a un classement général.
+
+Notre application est modulaire : 
+Il y a un programme principale et 
+
+
+Equipe : 
+
+
+1°) Manager :
+
+
+
+2°) Le Séparateur en différentes partie de l'api
+
+ - Gestion des évènement (creation, modification, suppression)
+ - Gestion des phases (creation, modification, suppression)
+ - Gestions des joueurs
+ - Gestion des équipes
+ - Gestion des rencontres
+ - Gestion des résultats
+ - Gestion des classements
+ - Gestion des formats et type.
+
+Il créé un fichier text par partie (évènement.txt, phase.txt, joueurs.txt, équipe.txt, rencontre.txt, ...).
+Ce fichier contient toutes les routes concernant chaque partie (toutes les route qui contiennent : évènement, phases, joueurs, ...)
+
+3°) le Checker : 
+On lui donne un route : Si c'est une route GET : il GET et il analyse la réponse
+Il va créé un fichier par route : nom de la route.txt qui contient la réponse de l'API.
+Si c'est une route POST : Il post avec des samples inventé pour avoir la réponse et renseigner le fichier text.
+
+3°) Module Maker
+Pour chaque "Partie" (évènement, phases, joueurs, équipes, ...) 
+Il va ouvrir le fichier text correspondant et le fichier route correspondant.
+avec ça, il créé un module de l'application

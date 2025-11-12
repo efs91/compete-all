@@ -1,0 +1,199 @@
+Cette API est destinée à gérer tout type de compétition sportive ou ludique : championnats, tournois, événements ponctuels, poules, tableaux à élimination directe, compétitions individuelles ou par équipe, compétitions d’échecs, danse, esport, etc.
+Elle doit être parfaitement modulaire, générique et extensible.
+Entités et leurs contraintes
+1. Événement (/evenements)
+
+Un événement représente une compétition globale.
+
+Attributs :
+
+    id : identifiant unique (UUID)
+    nom : texte (obligatoire)
+    date : date (facultatif)
+    description : texte (facultatif)
+    phases : liste facultative des phases de compétition
+
+Contraintes :
+
+    Peut être créé sans phase initiale.
+    CRUD complet requis.
+
+2. Phase (/evenements/{id_evenement}/phases)
+
+Une phase est une subdivision d’un événement (ex : "poules", "éliminations directes").
+
+Attributs :
+
+    id : UUID
+    nom : texte (obligatoire)
+    format : (OneShot | AllerRetour)
+    type : (Match | Groupe)
+    scoring (facultatif, uniquement si type=Groupe) :
+        points_par_place : ex: {"1":10,"2":5,"default":0}
+        points_par_action : ex: {"kill":5,"but":1}
+    configuration : paramètres généraux :
+        points_par_match : entier
+        nombre_manches : entier
+        points_max_pour_gagner : entier (facultatif)
+        temps_par_manche : entier en minutes (facultatif)
+        score_absolu_pour_gagner : entier (facultatif, ex : 7 pour 7-0)
+        peut_match_nul : booléen (facultatif)
+        joueurs_par_poule : objet (facultatif)
+            min : entier
+            ideal : entier
+            max : entier
+        regles_supplementaires (facultatif)
+            mort_subite :
+                active : booléen
+                duree : entier en minutes (facultatif)
+
+Contraintes :
+
+    Obligatoirement rattachée à un événement.
+    CRUD complet requis.
+
+3. Rencontre (/phases/{id_phase}/rencontres)
+
+Une rencontre est une confrontation directe entre participants.
+
+Attributs :
+
+    id : UUID
+    participants : liste d’identifiants des participants (joueurs ou équipes)
+    resultats : liste facultative des résultats finaux
+
+Contraintes :
+
+    Obligatoirement liée à une phase.
+    CRUD complet requis.
+    Résultats renseignés après la fin de la rencontre.
+
+4. Participant (/participants)
+
+Un participant peut être un joueur individuel ou une équipe.
+
+Attributs :
+
+    id : UUID
+    nom : texte
+    type : (Joueur | Equipe)
+    membres : facultatif (uniquement si type=Equipe) liste d’identifiants des joueurs membres
+
+Contraintes :
+
+    CRUD complet requis.
+    Équipe obligatoirement composée d’au moins 1 joueur.
+
+5. Joueur (/joueurs)
+
+Un joueur est une personne physique participant à la compétition.
+
+Attributs :
+
+    id : UUID
+    nom : texte (obligatoire)
+
+Contraintes :
+
+    CRUD complet requis.
+    Un joueur peut appartenir à plusieurs équipes simultanément.
+
+6. Équipe (/equipes)
+
+Une équipe regroupe plusieurs joueurs.
+
+Attributs :
+
+    id : UUID
+    nom : texte (obligatoire)
+    membres : liste obligatoire des joueurs (id)
+
+Contraintes :
+
+    CRUD complet requis.
+    Doit avoir au moins un membre joueur.
+
+7. Résultat (/rencontres/{id_rencontre}/resultats)
+
+Un résultat indique la performance d’un participant à l’issue d’une rencontre.
+
+Attributs :
+
+    participant_id : UUID du participant
+    classement : entier indiquant la position finale (1,2,3...)
+    points : entier total obtenu
+    actions : facultatif (ex: {"kill":5,"but":2,"temps":"00:45:23"})
+
+Contraintes :
+
+    Chaque résultat est associé à un unique participant par rencontre.
+    CRUD complet requis.
+    Chaque participant ne peut avoir qu’un résultat par rencontre.
+
+8. Règles personnalisées (/regles)
+
+Définit dynamiquement les règles spécifiques par sport ou épreuve.
+
+Attributs :
+
+    sport : identifiant unique texte (ex: "football", "escrime", "échecs", "danse")
+    parametres : JSON libre, dynamique (ex : durée manche, prolongation, nombre de manches, etc.)
+
+Contraintes :
+
+    CRUD complet requis.
+    Réutilisable par différentes phases selon le type d'épreuve.
+
+Contraintes techniques générales
+
+    Format unique des réponses JSON standardisé.
+    Codes HTTP obligatoires :
+        Succès : 200 OK, 201 Created
+        Erreurs : 400 Bad Request, 404 Not Found, 500 Internal Error
+    Pagination requise pour toutes les listes (participants, équipes, rencontres, résultats…).
+    Validation stricte des entrées avec messages d’erreur explicites.
+
+Résumé complet des Endpoints (CRUD)
+
+# Événements
+GET/POST                 /evenements
+GET/PUT/DELETE           /evenements/{id}
+
+# Phases
+GET/POST                 /evenements/{id}/phases
+GET/PUT/DELETE           /phases/{id}
+
+# Rencontres
+GET/POST                 /phases/{id}/rencontres
+GET/PUT/DELETE           /rencontres/{id}
+
+# Résultats
+GET/POST                 /rencontres/{id}/resultats
+GET/PUT/DELETE           /resultats/{id}
+
+# Participants
+GET/POST                 /participants
+GET/PUT/DELETE           /participants/{id}
+
+# Joueurs
+GET/POST                 /joueurs
+GET/PUT/DELETE           /joueurs/{id}
+
+# Équipes
+GET/POST                 /equipes
+GET/PUT/DELETE           /equipes/{id}
+
+# Règles
+GET/POST                 /regles
+GET/PUT/DELETE           /regles/{sport}
+
+Récapitulatif du flux d’usage standard :
+
+    Création d'un événement
+    Ajout optionnel des phases associées
+    Création des participants (joueurs ou équipes)
+    Création des équipes avec joueurs préexistants
+    Création automatique ou manuelle des rencontres selon le format (poules/tableaux)
+    Ajout des résultats par rencontre
+    Récupération des classements globaux par phase ou événement
+

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Types de phases{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2>Types de phases</h2>
+        <a href="{{ url_for('create_type') }}" class="btn btn-primary">+ Nouveau type</a>
+    </div>
+    
+    {% if types %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Nom</th>
+                    <th>Config résultats</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for type in types %}
+                <tr>
+                    <td><strong>{{ type.nom }}</strong></td>
+                    <td>
+                        {% if type.resultats_config %}
+                            {% if type.resultats_config.classement %}
+                                <span class="badge badge-info">Classement</span>
+                            {% endif %}
+                            {% if type.resultats_config.points %}
+                                <span class="badge badge-info">Points</span>
+                            {% endif %}
+                            {% if type.resultats_config.actions %}
+                                <span class="badge badge-info">Actions</span>
+                            {% endif %}
+                            {% if not type.resultats_config.classement and not type.resultats_config.points and not type.resultats_config.actions %}
+                                <span style="color: #999;">Non configuré</span>
+                            {% endif %}
+                        {% else %}
+                            <span style="color: #999;">Non configuré</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('edit_type', type_id=type.id) }}" class="btn btn-sm">Modifier</a>
+                        <form method="POST" action="{{ url_for('delete_type', type_id=type.id) }}" style="display: inline;">
+                            <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Êtes-vous sûr de vouloir supprimer ce type ?')">Supprimer</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p style="color: #999; text-align: center; padding: 40px;">
+            Aucun type de phase. <a href="{{ url_for('create_type') }}">Créer le premier</a>
+        </p>
+    {% endif %}
+</div>
+
+<style>
+    .badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 3px;
+        font-size: 0.85em;
+        margin-right: 5px;
+    }
+    .badge-info {
+        background: #3498db;
+        color: white;
+    }
+</style>
+{% endblock %}

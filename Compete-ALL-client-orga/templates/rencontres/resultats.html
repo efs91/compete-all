@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Saisir les résultats{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Saisir les résultats de la rencontre</h2>
+</div>
+
+<div class="card">
+    <form method="POST">
+        <h3>Entrer les résultats</h3>
+        
+        {% if participants_details %}
+            {% for participant in participants_details %}
+                <div class="form-group">
+                    <label>
+                        <strong>{{ participant.username }}</strong>
+                        {% if participant.club %} - {{ participant.club }}{% endif %}
+                    </label>
+                    <input type="hidden" name="participant_id" value="{{ participant.id }}">
+                    
+                    <div style="display: grid; grid-template-columns: repeat({{ [resultats_config.classement, resultats_config.points, resultats_config.actions]|select|list|length }}, 1fr); gap: 10px; margin-top: 10px;">
+                        {% if resultats_config.classement %}
+                        <div>
+                            <label style="font-size: 0.9em;">Classement</label>
+                            <input type="number" name="classement" min="1" placeholder="Position" required>
+                        </div>
+                        {% endif %}
+                        
+                        {% if resultats_config.points %}
+                        <div>
+                            <label style="font-size: 0.9em;">Points</label>
+                            <input type="number" name="points" min="0" placeholder="Points" required>
+                        </div>
+                        {% endif %}
+                        
+                        {% if resultats_config.actions %}
+                        <div>
+                            <label style="font-size: 0.9em;">Actions (optionnel)</label>
+                            <input type="text" name="actions" placeholder='{"buts": 3}'>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p style="color: #e74c3c;">
+                ⚠️ Aucun participant défini pour cette rencontre. Impossible de saisir les résultats.
+            </p>
+        {% endif %}
+        
+        <div class="actions">
+            {% if participants_details %}
+                <button type="submit" class="btn btn-success">Enregistrer les résultats</button>
+            {% endif %}
+            <a href="javascript:history.back()" class="btn btn-secondary">Annuler</a>
+        </div>
+    </form>
+</div>
+
+{% if resultats %}
+    <div class="card">
+        <h3>Résultats actuels</h3>
+        <table>
+            <thead>
+                <tr>
+                    {% if resultats_config.classement %}<th>Classement</th>{% endif %}
+                    <th>Participant</th>
+                    {% if resultats_config.points %}<th>Points</th>{% endif %}
+                    {% if resultats_config.actions %}<th>Actions</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for resultat in resultats %}
+                <tr>
+                    {% if resultats_config.classement %}<td>{{ resultat.classement if resultat.classement else '-' }}</td>{% endif %}
+                    <td>{{ resultat.participant_id }}</td>
+                    {% if resultats_config.points %}<td>{{ resultat.points if resultat.points is not none else '-' }}</td>{% endif %}
+                    {% if resultats_config.actions %}<td>{{ resultat.actions if resultat.actions else '-' }}</td>{% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endif %}
+{% endblock %}

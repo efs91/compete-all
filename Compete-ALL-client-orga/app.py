@@ -79,10 +79,20 @@ def view_evenement(evenement_id):
         # Récupérer les statistiques
         stats = get_event_stats(evenement_id)
         
+        # Calculer le classement provisoire pour chaque phase
+        phases_classements = {}
+        for phase in phases:
+            joueurs_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}/phases/{phase['id']}/joueurs")
+            if joueurs_response.status_code == 200:
+                joueurs = joueurs_response.json()
+                classement = calculate_provisional_ranking(phase['id'], joueurs)
+                phases_classements[phase['id']] = classement
+        
         return render_template('evenements/view.html', 
                              evenement=evenement, 
                              phases=phases,
-                             stats=stats)
+                             stats=stats,
+                             phases_classements=phases_classements)
     except Exception as e:
         flash(f"Erreur: {str(e)}", "error")
         return redirect(url_for('index'))
@@ -171,17 +181,47 @@ def manage_phases(evenement_id):
 
 @app.route('/evenements/<evenement_id>/phases/add', methods=['POST'])
 def add_phase(evenement_id):
-    """Ajouter une phase à l'événement"""
+    """Ajouter une phase à l'événement avec configuration de qualification"""
     phase_id = request.form.get('phase_id')
     if not phase_id:
         flash("Aucune phase sélectionnée", "error")
         return redirect(url_for('manage_phases', evenement_id=evenement_id))
     
+    # Construire la configuration de qualification
+    config_qualification = None
+    mode_qualification = request.form.get('mode_qualification')
+    
+    if mode_qualification and mode_qualification != '':
+        # Construire les critères de tri
+        criteres = []
+        if request.form.get('critere_victoires'):
+            criteres.append('victoires')
+        if request.form.get('critere_vm'):
+            criteres.append('vm')
+        if request.form.get('critere_indice'):
+            criteres.append('indice')
+        if request.form.get('critere_td'):
+            criteres.append('touches_donnees')
+        
+        config_qualification = {
+            'mode': mode_qualification,
+            'criteres_tri': criteres if criteres else ['victoires', 'vm', 'indice']
+        }
+        
+        # Ajouter nb_qualifies ou pourcentage selon le type de sélection
+        if mode_qualification != 'tous_qualifies':
+            type_selection = request.form.get('type_selection', 'nombre')
+            if type_selection == 'pourcentage':
+                config_qualification['pourcentage_qualifies'] = int(request.form.get('pourcentage_qualifies', 50))
+            else:
+                config_qualification['nb_qualifies'] = int(request.form.get('nb_qualifies', 0))
+    
     try:
         response = requests.post(f"{API_BASE_URL}/evenements/{evenement_id}/phases",
                                json={
                                    "phase_id": phase_id,
-                                   "evenement_id": evenement_id
+                                   "evenement_id": evenement_id,
+                                   "config_qualification": config_qualification
                                })
         if response.status_code in (200, 201):
             flash("Phase ajoutée avec succès!", "success")
@@ -206,13 +246,63 @@ def remove_phase(evenement_id, phase_id):
     
     return redirect(url_for('manage_phases', evenement_id=evenement_id))
 
+@app.route('/evenements/<evenement_id>/phases/reorder', methods=['PUT'])
+def reorder_phases(evenement_id):
+    """Proxy pour réorganiser les phases via l'API FastAPI"""
+    try:
+        phase_orders = request.get_json()
+        response = requests.put(
+            f"{API_BASE_URL}/evenements/{evenement_id}/phases/reorder",
+            json=phase_orders
+        )
+        return jsonify(response.json()), response.status_code
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/evenements/<evenement_id>/lancer', methods=['POST'])
+def lancer_competition(evenement_id):
+    """Lance la compétition en inscrivant tous les joueurs à la première phase"""
+    try:
+        response = requests.post(f"{API_BASE_URL}/evenements/{evenement_id}/lancer")
+        
+        if response.status_code in (200, 201):
+            result = response.json()
+            flash(f"🎯 Compétition lancée avec succès !", "success")
+            flash(f"✅ {result['joueurs_inscrits']} joueurs inscrits à la première phase", "success")
+            flash(f"📊 {result['nb_poules']} poules créées", "success")
+            flash(f"⚔️ {result['rencontres_creees']} rencontres générées", "success")
+        else:
+            error_detail = response.json().get('detail', response.text)
+            flash(f"Erreur lors du lancement: {error_detail}", "error")
+    except Exception as e:
+        flash(f"Erreur: {str(e)}", "error")
+    
+    return redirect(url_for('view_evenement', evenement_id=evenement_id))
+
+@app.route('/evenements/<evenement_id>/phases/<phase_id>/qualifier', methods=['POST'])
+def qualifier_phase(evenement_id, phase_id):
+    """Qualifie automatiquement les joueurs pour la phase suivante"""
+    try:
+        response = requests.post(f"{API_BASE_URL}/evenements/{evenement_id}/phases/{phase_id}/qualifier")
+        
+        if response.status_code in (200, 201):
+            result = response.json()
+            flash(f"✅ {result['joueurs_qualifies']} joueurs qualifiés pour la phase suivante (mode: {result['mode']})", "success")
+        else:
+            error_detail = response.json().get('detail', response.text)
+            flash(f"Erreur lors de la qualification: {error_detail}", "error")
+    except Exception as e:
+        flash(f"Erreur: {str(e)}", "error")
+    
+    return redirect(url_for('view_rencontres', evenement_id=evenement_id, phase_id=phase_id))
+
 # ============================================
 # GESTION DES INSCRIPTIONS
 # ============================================
 
 @app.route('/evenements/<evenement_id>/inscriptions')
 def manage_inscriptions(evenement_id):
-    """Gérer les inscriptions à un événement"""
+    """Gérer les inscriptions globales à un événement"""
     try:
         # Récupérer l'événement
         event_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}")
@@ -222,26 +312,61 @@ def manage_inscriptions(evenement_id):
         
         evenement = event_response.json()
         
-        # Récupérer les phases de l'événement
-        phases_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}/phases")
-        phases = phases_response.json() if phases_response.status_code == 200 else []
-        
-        # Pour chaque phase, récupérer les joueurs inscrits
-        for phase in phases:
-            joueurs_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}/phases/{phase['id']}/joueurs")
-            phase['joueurs'] = joueurs_response.json() if joueurs_response.status_code == 200 else []
+        # Récupérer les joueurs inscrits à l'événement
+        inscriptions_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}/inscriptions")
+        joueurs_inscrits = inscriptions_response.json() if inscriptions_response.status_code == 200 else []
         
         # Récupérer tous les joueurs disponibles
         all_players_response = requests.get(f"{API_BASE_URL}/joueurs")
         all_players = all_players_response.json() if all_players_response.status_code == 200 else []
         
+        # Filtrer les joueurs non inscrits
+        joueurs_inscrits_ids = [j['id'] for j in joueurs_inscrits]
+        joueurs_disponibles = [p for p in all_players if p['id'] not in joueurs_inscrits_ids]
+        
         return render_template('inscriptions/manage.html', 
                              evenement=evenement, 
-                             phases=phases,
-                             all_players=all_players)
+                             joueurs_inscrits=joueurs_inscrits,
+                             joueurs_disponibles=joueurs_disponibles)
     except Exception as e:
         flash(f"Erreur: {str(e)}", "error")
         return redirect(url_for('view_evenement', evenement_id=evenement_id))
+
+@app.route('/evenements/<evenement_id>/inscriptions/add', methods=['POST'])
+def add_event_inscription(evenement_id):
+    """Ajouter un joueur à l'événement"""
+    joueur_id = request.form.get('joueur_id')
+    
+    if not joueur_id:
+        flash("Veuillez sélectionner un joueur", "error")
+        return redirect(url_for('manage_inscriptions', evenement_id=evenement_id))
+    
+    try:
+        response = requests.post(f"{API_BASE_URL}/evenements/{evenement_id}/inscriptions/{joueur_id}")
+        
+        if response.status_code in (200, 201):
+            flash("Joueur inscrit avec succès", "success")
+        else:
+            flash(f"Erreur lors de l'inscription: {response.text}", "error")
+    except Exception as e:
+        flash(f"Erreur: {str(e)}", "error")
+    
+    return redirect(url_for('manage_inscriptions', evenement_id=evenement_id))
+
+@app.route('/evenements/<evenement_id>/inscriptions/<joueur_id>/delete', methods=['POST'])
+def remove_event_inscription(evenement_id, joueur_id):
+    """Retirer un joueur de l'événement"""
+    try:
+        response = requests.delete(f"{API_BASE_URL}/evenements/{evenement_id}/inscriptions/{joueur_id}")
+        
+        if response.status_code in (200, 204):
+            flash("Joueur retiré avec succès", "success")
+        else:
+            flash(f"Erreur lors du retrait: {response.text}", "error")
+    except Exception as e:
+        flash(f"Erreur: {str(e)}", "error")
+    
+    return redirect(url_for('manage_inscriptions', evenement_id=evenement_id))
 
 @app.route('/evenements/<evenement_id>/phases/<phase_id>/inscriptions/add', methods=['POST'])
 def add_inscription(evenement_id, phase_id):
@@ -284,6 +409,27 @@ def remove_inscription(evenement_id, phase_id, joueur_id):
 # GÉNÉRATION DES RENCONTRES
 # ============================================
 
+@app.route('/evenements/<evenement_id>/phases/<phase_id>/poules/generer', methods=['POST'])
+def generer_poules(evenement_id, phase_id):
+    """Générer automatiquement les poules pour une phase"""
+    try:
+        response = requests.post(f"{API_BASE_URL}/evenements/{evenement_id}/phases/{phase_id}/poules/generer")
+        
+        if response.status_code in (200, 201):
+            result = response.json()
+            flash(f"✅ {result['nb_poules']} poules créées avec {result['nb_joueurs_total']} joueurs", "success")
+            # Afficher les détails des poules
+            for poule in result.get('poules', []):
+                flash(f"   • {poule['nom']} : {len(poule['joueurs'])} joueurs", "info")
+        else:
+            error_detail = response.json().get('detail', response.text)
+            flash(f"Erreur lors de la génération des poules: {error_detail}", "error")
+    except Exception as e:
+        flash(f"Erreur: {str(e)}", "error")
+    
+    # Rester sur la page de génération pour passer à l'étape 2 (générer les rencontres)
+    return redirect(url_for('generate_rencontres', evenement_id=evenement_id, phase_id=phase_id))
+
 @app.route('/evenements/<evenement_id>/phases/<phase_id>/generate', methods=['GET', 'POST'])
 def generate_rencontres(evenement_id, phase_id):
     """Générer les rencontres pour une phase"""
@@ -316,11 +462,12 @@ def generate_rencontres(evenement_id, phase_id):
                                 "evenement_id": evenement_id,
                                 **rencontre_data
                             })
-                print(f"DEBUG - Création rencontre: status={response.status_code}, data={rencontre_data}")
+                #print(f"DEBUG - Création rencontre: status={response.status_code}, data={rencontre_data}")
                 if response.status_code in (200, 201):
                     created_count += 1
                 else:
-                    print(f"DEBUG - Erreur: {response.text}")
+                    pass  # Erreur de création
+                    #print(f"DEBUG - Erreur: {response.text}")
             
             flash(f"{created_count}/{len(rencontres)} rencontres générées avec succès!", "success")
             return redirect(url_for('view_rencontres', evenement_id=evenement_id, phase_id=phase_id))
@@ -353,48 +500,165 @@ def generate_rencontres(evenement_id, phase_id):
 
 @app.route('/evenements/<evenement_id>/phases/<phase_id>/rencontres')
 def view_rencontres(evenement_id, phase_id):
-    """Voir les rencontres d'une phase"""
+    """Voir les rencontres d'une phase - VERSION OPTIMISÉE"""
     try:
         event_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}")
-        phase_response = requests.get(f"{API_BASE_URL}/phases/{phase_id}")
-        rencontres_response = requests.get(f"{API_BASE_URL}/phases/{phase_id}/rencontres")
+        # Récupérer la phase avec sa relation dans l'événement (contient config_qualification)
+        phase_in_event_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}/phases")
         
-        # Debug
-        print(f"DEBUG - URL: {API_BASE_URL}/phases/{phase_id}/rencontres")
-        print(f"DEBUG - Status: {rencontres_response.status_code}")
-        print(f"DEBUG - Response: {rencontres_response.text[:500] if rencontres_response.text else 'Empty'}")
+        # Utiliser la nouvelle route optimisée qui retourne tout en une seule requête
+        rencontres_response = requests.get(f"{API_BASE_URL}/phases/{phase_id}/rencontres-complete")
         
         evenement = event_response.json() if event_response.status_code == 200 else {}
-        phase = phase_response.json() if phase_response.status_code == 200 else {}
+        phases_in_event = phase_in_event_response.json() if phase_in_event_response.status_code == 200 else []
+        
+        # Trouver la phase actuelle avec sa config_qualification
+        phase = next((p for p in phases_in_event if p['id'] == phase_id), {})
         rencontres = rencontres_response.json() if rencontres_response.status_code == 200 else []
         
-        print(f"DEBUG - Nombre de rencontres: {len(rencontres)}")
-        
-        # Pour chaque rencontre, récupérer les résultats et les infos des participants
-        all_joueurs = {}  # Cache pour éviter de requêter plusieurs fois le même joueur
-        for rencontre in rencontres:
-            resultats_response = requests.get(f"{API_BASE_URL}/rencontres/{rencontre['id']}/resultats")
-            rencontre['resultats'] = resultats_response.json() if resultats_response.status_code == 200 else []
-            
-            # Récupérer les infos des participants
-            if rencontre.get('participants'):
-                rencontre['participants_details'] = []
-                for joueur_id in rencontre['participants']:
-                    if joueur_id not in all_joueurs:
-                        joueur_response = requests.get(f"{API_BASE_URL}/joueurs/{joueur_id}")
-                        if joueur_response.status_code == 200:
-                            all_joueurs[joueur_id] = joueur_response.json()
-                        else:
-                            all_joueurs[joueur_id] = {'id': joueur_id, 'username': 'Inconnu', 'club': ''}
-                    rencontre['participants_details'].append(all_joueurs[joueur_id])
+        # Récupérer les joueurs inscrits et calculer le classement provisoire
+        joueurs_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}/phases/{phase_id}/joueurs")
+        joueurs = joueurs_response.json() if joueurs_response.status_code == 200 else []
+        classement = calculate_provisional_ranking(phase_id, joueurs)
         
         return render_template('rencontres/list.html',
                              evenement=evenement,
                              phase=phase,
-                             rencontres=rencontres)
+                             rencontres=rencontres,
+                             classement=classement)
     except Exception as e:
         flash(f"Erreur: {str(e)}", "error")
         return redirect(url_for('view_evenement', evenement_id=evenement_id))
+
+@app.route('/evenements/<evenement_id>/phases/<phase_id>/feuille-poule')
+def view_feuille_poule(evenement_id, phase_id):
+    """Afficher la feuille de poule (mode saisie arbitre)"""
+    try:
+        event_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}")
+        phase_response = requests.get(f"{API_BASE_URL}/phases/{phase_id}")
+        
+        evenement = event_response.json() if event_response.status_code == 200 else {}
+        phase = phase_response.json() if phase_response.status_code == 200 else {}
+        
+        # Récupérer les poules de cette phase
+        poules_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}/phases/{phase_id}/poules")
+        poules = poules_response.json() if poules_response.status_code == 200 else []
+        
+        # Si pas de poules, afficher tous les joueurs ensemble (ancien comportement)
+        if not poules:
+            # Récupérer les joueurs inscrits
+            joueurs_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}/phases/{phase_id}/joueurs")
+            joueurs = joueurs_response.json() if joueurs_response.status_code == 200 else []
+            poules = [{
+                'id': None,
+                'nom': 'Tous les joueurs',
+                'ordre': 1,
+                'joueurs': [{'id': j.get('joueur_id'), 'username': j.get('joueur', {}).get('username', 'N/A')} for j in joueurs]
+            }]
+        
+        joueurs_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}/phases/{phase_id}/joueurs")
+        joueurs = joueurs_response.json() if joueurs_response.status_code == 200 else []
+        
+        # Récupérer toutes les rencontres avec résultats
+        rencontres_response = requests.get(f"{API_BASE_URL}/phases/{phase_id}/rencontres-complete")
+        rencontres = rencontres_response.json() if rencontres_response.status_code == 200 else []
+        
+        # Construire la matrice des résultats
+        # matrice[joueur_i_id][joueur_j_id] = score de i contre j
+        matrice = {}
+        joueurs_details = {}
+        
+        # Récupérer les détails de tous les joueurs EN PARALLÈLE
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        joueur_ids = [j.get('joueur_id') for j in joueurs]
+        
+        def fetch_joueur(joueur_id):
+            response = requests.get(f"{API_BASE_URL}/joueurs/{joueur_id}")
+            if response.status_code == 200:
+                return joueur_id, response.json()
+            return joueur_id, None
+        
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {executor.submit(fetch_joueur, jid): jid for jid in joueur_ids}
+            for future in as_completed(futures):
+                joueur_id, joueur_data = future.result()
+                if joueur_data:
+                    joueurs_details[joueur_id] = joueur_data
+                matrice[joueur_id] = {}
+        
+        # Remplir la matrice avec les résultats existants
+        for rencontre in rencontres:
+            participants = rencontre.get('participants', [])
+            resultats = rencontre.get('resultats', [])
+            
+            if len(participants) == 2 and len(resultats) >= 1:
+                # Créer un dict des résultats par participant
+                resultats_dict = {r['participant_id']: r for r in resultats}
+                
+                for participant_id in participants:
+                    if participant_id in resultats_dict:
+                        resultat = resultats_dict[participant_id]
+                        # Trouver l'adversaire
+                        adversaire_id = [p for p in participants if p != participant_id][0] if len(participants) == 2 else None
+                        
+                        if adversaire_id and participant_id in matrice:
+                            matrice[participant_id][adversaire_id] = {
+                                'rencontre_id': rencontre['id'],
+                                'points': resultat.get('points'),
+                                'classement': resultat.get('classement')
+                            }
+        
+        # Calculer le classement provisoire
+        classement = calculate_provisional_ranking(phase_id, joueurs)
+        
+        # Récupérer le max de points depuis la configuration de la phase
+        configuration = phase.get('configuration', {})
+        max_points = configuration.get('points_max')
+        
+        # Si pas dans configuration, essayer depuis le scoring
+        if max_points is None:
+            scoring = phase.get('scoring', {})
+            if scoring.get('classement') and scoring['classement'].get('placeRanges'):
+                # Trouver le max dans les placeRanges
+                max_points = max([r['points'] for r in scoring['classement']['placeRanges']], default=15)
+        
+        # Par défaut 15 si rien n'est trouvé
+        if max_points is None:
+            max_points = 15
+        
+        return render_template('rencontres/feuille_poule.html',
+                             evenement=evenement,
+                             phase=phase,
+                             poules=poules,
+                             joueurs=joueurs,
+                             joueurs_details=joueurs_details,
+                             matrice=matrice,
+                             classement=classement,
+                             max_points=max_points)
+    except Exception as e:
+        flash(f"Erreur: {str(e)}", "error")
+        return redirect(url_for('view_rencontres', evenement_id=evenement_id, phase_id=phase_id))
+
+@app.route('/evenements/<evenement_id>/phases/<phase_id>/feuille-poule/save', methods=['POST'])
+def save_feuille_poule_result(evenement_id, phase_id):
+    """Proxy pour sauvegarder un résultat de feuille de poule (évite les problèmes CORS)"""
+    try:
+        data = request.get_json()
+        
+        # Appeler l'API backend
+        response = requests.post(
+            f"{API_BASE_URL}/phases/{phase_id}/feuille-poule/save-result",
+            json=data
+        )
+        
+        if response.status_code == 200:
+            return jsonify(response.json()), 200
+        else:
+            return jsonify({"error": response.text}), response.status_code
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/rencontres/<rencontre_id>/resultats', methods=['GET', 'POST'])
 def edit_resultats(rencontre_id):
@@ -483,28 +747,31 @@ def edit_resultats(rencontre_id):
 
 @app.route('/evenements/<evenement_id>/classements')
 def view_classements(evenement_id):
-    """Voir les classements d'un événement"""
+    """Voir les classements d'un événement - CALCUL DYNAMIQUE"""
     try:
         event_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}")
         evenement = event_response.json() if event_response.status_code == 200 else {}
-        
-        # Récupérer les classements
-        classements_response = requests.get(f"{API_BASE_URL}/classements/evenements/{evenement_id}/classements")
-        classements = classements_response.json() if classements_response.status_code == 200 else []
         
         # Récupérer les phases
         phases_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}/phases")
         phases = phases_response.json() if phases_response.status_code == 200 else []
         
-        # Pour chaque phase, récupérer son classement
+        # Pour chaque phase, calculer le classement provisoire dynamiquement
+        phases_classements = []
         for phase in phases:
-            phase_classement_response = requests.get(f"{API_BASE_URL}/classements/phases/{phase['id']}/classements")
-            phase['classements'] = phase_classement_response.json() if phase_classement_response.status_code == 200 else []
+            joueurs_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}/phases/{phase['id']}/joueurs")
+            if joueurs_response.status_code == 200:
+                joueurs = joueurs_response.json()
+                classement = calculate_provisional_ranking(phase['id'], joueurs)
+                
+                phases_classements.append({
+                    'phase': phase,
+                    'classement': classement
+                })
         
         return render_template('classements/view.html',
                              evenement=evenement,
-                             classements=classements,
-                             phases=phases)
+                             phases_classements=phases_classements)
     except Exception as e:
         flash(f"Erreur: {str(e)}", "error")
         return redirect(url_for('view_evenement', evenement_id=evenement_id))
@@ -514,7 +781,7 @@ def view_classements(evenement_id):
 # ============================================
 
 def get_event_stats(evenement_id):
-    """Récupérer les statistiques d'un événement"""
+    """Récupérer les statistiques d'un événement - VERSION OPTIMISÉE"""
     stats = {
         'total_joueurs': 0,
         'total_rencontres': 0,
@@ -538,16 +805,15 @@ def get_event_stats(evenement_id):
                     for joueur in joueurs:
                         joueurs_ids.add(joueur['joueur_id'])
                 
-                # Compter les rencontres
-                rencontres_response = requests.get(f"{API_BASE_URL}/phases/{phase['id']}/rencontres")
+                # OPTIMISATION: Utiliser la route optimisée rencontres-complete
+                rencontres_response = requests.get(f"{API_BASE_URL}/phases/{phase['id']}/rencontres-complete")
                 if rencontres_response.status_code == 200:
                     rencontres = rencontres_response.json()
                     stats['total_rencontres'] += len(rencontres)
                     
-                    # Compter les rencontres terminées (avec résultats)
+                    # Les rencontres-complete incluent déjà les résultats !
                     for rencontre in rencontres:
-                        resultats_response = requests.get(f"{API_BASE_URL}/rencontres/{rencontre['id']}/resultats")
-                        if resultats_response.status_code == 200 and resultats_response.json():
+                        if rencontre.get('resultats') and len(rencontre['resultats']) > 0:
                             stats['rencontres_terminees'] += 1
             
             stats['total_joueurs'] = len(joueurs_ids)
@@ -555,6 +821,217 @@ def get_event_stats(evenement_id):
         pass
     
     return stats
+
+def calculate_provisional_ranking(phase_id, joueurs_inscrits):
+    """Calculer le classement provisoire d'une phase basé sur les résultats disponibles"""
+    classement = {}
+    
+    try:
+        # Récupérer la phase pour connaître le scoring
+        phase_response = requests.get(f"{API_BASE_URL}/phases/{phase_id}")
+        if phase_response.status_code != 200:
+            #print(f"DEBUG: Phase non trouvée - {phase_id}")
+            return []
+        
+        phase = phase_response.json()
+        scoring = phase.get('scoring', {})
+        #print(f"DEBUG: Phase {phase.get('nom')} - Scoring: {scoring}")
+        
+        # Initialiser les scores pour tous les joueurs inscrits
+        for joueur in joueurs_inscrits:
+            joueur_id = joueur.get('joueur_id')
+            classement[joueur_id] = {
+                'joueur_id': joueur_id,
+                'username': None,  # Sera rempli après
+                'club': None,
+                'points': 0,
+                'victoires': 0,
+                'defaites': 0,
+                'nuls': 0,
+                'rencontres_jouees': 0,
+                'touches_donnees': 0,  # Pour l'indice
+                'touches_recues': 0    # Pour l'indice
+            }
+        
+        # Récupérer toutes les rencontres avec résultats
+        rencontres_response = requests.get(f"{API_BASE_URL}/phases/{phase_id}/rencontres-complete")
+        if rencontres_response.status_code == 200:
+            rencontres = rencontres_response.json()
+            #print(f"DEBUG: {len(rencontres)} rencontres trouvées")
+            
+            for rencontre in rencontres:
+                resultats = rencontre.get('resultats', [])
+                #print(f"DEBUG: Rencontre {rencontre.get('id')[:8]}... - {len(resultats)} résultats")
+                if resultats:
+                    pass  # Log désactivé pour performance
+                    #print(f"DEBUG: Résultats: {resultats}")
+                
+                if not resultats or len(resultats) < 2:
+                    #print(f"DEBUG: Rencontre ignorée (pas assez de résultats)")
+                    continue  # Pas de résultats ou incomplets
+                
+                # Traiter les résultats selon le type de scoring
+                if scoring.get('match'):
+                    # Scoring par match (victoire/nul/défaite)
+                    points_match = scoring['match']
+                    
+                    if len(resultats) == 2:
+                        r1, r2 = resultats[0], resultats[1]
+                        
+                        # Utiliser les points saisis pour déterminer le vainqueur
+                        points_r1 = r1.get('points', 0) or 0
+                        points_r2 = r2.get('points', 0) or 0
+                        
+                        # Comptabiliser les touches données et reçues
+                        if r1['participant_id'] in classement:
+                            classement[r1['participant_id']]['touches_donnees'] += points_r1
+                            classement[r1['participant_id']]['touches_recues'] += points_r2
+                        if r2['participant_id'] in classement:
+                            classement[r2['participant_id']]['touches_donnees'] += points_r2
+                            classement[r2['participant_id']]['touches_recues'] += points_r1
+                        
+                        #print(f"DEBUG: Match - {r1['participant_id'][:8]}: {points_r1} vs {r2['participant_id'][:8]}: {points_r2}")
+                        
+                        if points_r1 == points_r2:
+                            # Match nul
+                            #print(f"DEBUG: Match nul détecté")
+                            if r1['participant_id'] in classement:
+                                classement[r1['participant_id']]['points'] += points_match.get('nul', 1)
+                                classement[r1['participant_id']]['nuls'] += 1
+                                classement[r1['participant_id']]['rencontres_jouees'] += 1
+                            if r2['participant_id'] in classement:
+                                classement[r2['participant_id']]['points'] += points_match.get('nul', 1)
+                                classement[r2['participant_id']]['nuls'] += 1
+                                classement[r2['participant_id']]['rencontres_jouees'] += 1
+                        elif points_r1 > points_r2:
+                            # r1 gagne
+                            #print(f"DEBUG: {r1['participant_id'][:8]} gagne")
+                            if r1['participant_id'] in classement:
+                                classement[r1['participant_id']]['points'] += points_match.get('victoire', 3)
+                                classement[r1['participant_id']]['victoires'] += 1
+                                classement[r1['participant_id']]['rencontres_jouees'] += 1
+                            if r2['participant_id'] in classement:
+                                classement[r2['participant_id']]['points'] += points_match.get('defaite', 0)
+                                classement[r2['participant_id']]['defaites'] += 1
+                                classement[r2['participant_id']]['rencontres_jouees'] += 1
+                        else:
+                            # r2 gagne
+                            #print(f"DEBUG: {r2['participant_id'][:8]} gagne")
+                            if r2['participant_id'] in classement:
+                                classement[r2['participant_id']]['points'] += points_match.get('victoire', 3)
+                                classement[r2['participant_id']]['victoires'] += 1
+                                classement[r2['participant_id']]['rencontres_jouees'] += 1
+                            if r1['participant_id'] in classement:
+                                classement[r1['participant_id']]['points'] += points_match.get('defaite', 0)
+                                classement[r1['participant_id']]['defaites'] += 1
+                                classement[r1['participant_id']]['rencontres_jouees'] += 1
+                
+                elif scoring.get('classement'):
+                    # Scoring par classement (placeRanges)
+                    place_ranges = scoring['classement'].get('placeRanges', [])
+                    
+                    # Comptabiliser les touches et victoires pour tous les participants
+                    if len(resultats) == 2:
+                        r1, r2 = resultats[0], resultats[1]
+                        points_r1 = r1.get('points', 0) or 0
+                        points_r2 = r2.get('points', 0) or 0
+                        
+                        #print(f"DEBUG Classement - Match: {r1['participant_id'][:8]}: {points_r1} vs {r2['participant_id'][:8]}: {points_r2}")
+                        
+                        if r1['participant_id'] in classement:
+                            classement[r1['participant_id']]['touches_donnees'] += points_r1
+                            classement[r1['participant_id']]['touches_recues'] += points_r2
+                            classement[r1['participant_id']]['rencontres_jouees'] += 1
+                            
+                            # Compter la victoire
+                            if r1.get('classement') == 1:
+                                classement[r1['participant_id']]['victoires'] += 1
+                            elif r1.get('classement') == 2:
+                                classement[r1['participant_id']]['defaites'] += 1
+                            
+                            #print(f"DEBUG {r1['participant_id'][:8]} - TD:{classement[r1['participant_id']]['touches_donnees']} TR:{classement[r1['participant_id']]['touches_recues']} V:{classement[r1['participant_id']]['victoires']}")
+                        
+                        if r2['participant_id'] in classement:
+                            classement[r2['participant_id']]['touches_donnees'] += points_r2
+                            classement[r2['participant_id']]['touches_recues'] += points_r1
+                            classement[r2['participant_id']]['rencontres_jouees'] += 1
+                            
+                            # Compter la victoire
+                            if r2.get('classement') == 1:
+                                classement[r2['participant_id']]['victoires'] += 1
+                            elif r2.get('classement') == 2:
+                                classement[r2['participant_id']]['defaites'] += 1
+                            
+                            #print(f"DEBUG {r2['participant_id'][:8]} - TD:{classement[r2['participant_id']]['touches_donnees']} TR:{classement[r2['participant_id']]['touches_recues']} V:{classement[r2['participant_id']]['victoires']}")
+                    
+                    # Attribution des points selon les placeRanges
+                    for resultat in resultats:
+                        if resultat['participant_id'] not in classement:
+                            continue
+                        
+                        place = resultat.get('classement')
+                        if place:
+                            # Trouver les points correspondant à la place
+                            points_place = 0
+                            for range_item in place_ranges:
+                                if range_item['from'] <= place <= range_item['to']:
+                                    points_place = range_item['points']
+                                    break
+                            
+                            classement[resultat['participant_id']]['points'] += points_place
+        
+        # Récupérer les infos des joueurs EN PARALLÈLE
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        joueurs_ids = list(classement.keys())
+        if joueurs_ids:
+            def fetch_joueur_info(joueur_id):
+                response = requests.get(f"{API_BASE_URL}/joueurs/{joueur_id}")
+                if response.status_code == 200:
+                    return joueur_id, response.json()
+                return joueur_id, None
+            
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                futures = {executor.submit(fetch_joueur_info, jid): jid for jid in joueurs_ids}
+                for future in as_completed(futures):
+                    joueur_id, joueur_data = future.result()
+                    if joueur_data:
+                        classement[joueur_id]['username'] = joueur_data.get('username', 'Inconnu')
+                        classement[joueur_id]['club'] = joueur_data.get('club', '')
+        
+        # Calculer V/M (Victoires sur Matchs) et Indice pour chaque joueur
+        for joueur_id in classement:
+            rencontres_jouees = classement[joueur_id]['rencontres_jouees']
+            if rencontres_jouees > 0:
+                classement[joueur_id]['vm'] = classement[joueur_id]['victoires'] / rencontres_jouees
+            else:
+                classement[joueur_id]['vm'] = 0
+            
+            classement[joueur_id]['indice'] = classement[joueur_id]['touches_donnees'] - classement[joueur_id]['touches_recues']
+        
+        # Construire la clé de tri dynamiquement selon phase.scoring.ordrePriorite
+        ordre_priorite = scoring.get('ordrePriorite', ['Points de Victoire', 'V/M', 'Indice (GoalAverage)', 'Points mis'])
+        
+        # Mapping des noms de critères vers les clés du dict
+        critere_mapping = {
+            'Points de Victoire': lambda x: -x['victoires'],
+            'V/M': lambda x: -x['vm'],
+            'Indice (GoalAverage)': lambda x: -x['indice'],
+            'Points mis': lambda x: -x['touches_donnees'],
+            'Points Pris': lambda x: -x['touches_recues']
+        }
+        
+        # Construire le tuple de tri
+        def build_sort_key(joueur):
+            return tuple(critere_mapping.get(critere, lambda x: 0)(joueur) for critere in ordre_priorite)
+        
+        classement_list = sorted(classement.values(), key=build_sort_key)
+        
+        return classement_list
+        
+    except Exception as e:
+        print(f"Erreur calcul classement: {e}")
+        return []
 
 def generate_matches_algorithm(joueurs, phase):
     """Algorithme de génération des rencontres selon le type de phase"""
@@ -575,7 +1052,7 @@ def generate_matches_algorithm(joueurs, phase):
                 "participants": [joueurs_list[i], joueurs_list[j]]
             })
     
-    print(f"DEBUG - Génération de {len(rencontres)} rencontres pour {len(joueurs_list)} joueurs")
+    #print(f"DEBUG - Génération de {len(rencontres)} rencontres pour {len(joueurs_list)} joueurs")
     return rencontres
 
 # ============================================

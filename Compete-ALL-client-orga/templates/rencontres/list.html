@@ -6,11 +6,73 @@
 <div class="card">
     <h2>Rencontres - {{ phase.nom }}</h2>
     <p><strong>Événement:</strong> {{ evenement.nom }}</p>
+    <div style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
+        <a href="{{ url_for('view_feuille_poule', evenement_id=evenement.id, phase_id=phase.id) }}" class="btn btn-primary">📋 Mode Feuille de Poule</a>
+        <a href="{{ url_for('view_evenement', evenement_id=evenement.id) }}" class="btn btn-secondary">← Retour à l'événement</a>
+        
+        <!-- Bouton Qualifier pour phase suivante (visible si config_qualification existe et phase suivante existe) -->
+        {% if phase.config_qualification and phase.config_qualification.mode != 'aucune' %}
+            <form method="POST" action="{{ url_for('qualifier_phase', evenement_id=evenement.id, phase_id=phase.id) }}" 
+                  style="display: inline; margin: 0;" 
+                  onsubmit="return confirm('Qualifier les joueurs pour la phase suivante selon les règles configurées ?');">
+                <button type="submit" class="btn btn-success">🎯 Qualifier pour phase suivante</button>
+            </form>
+        {% endif %}
+    </div>
 </div>
+
+<!-- Classement provisoire -->
+{% if classement and classement|length > 0 %}
+<div class="card">
+    <h3>🏆 Classement provisoire</h3>
+    <table style="margin-top: 15px;">
+        <thead>
+            <tr>
+                <th style="width: 60px;">Position</th>
+                <th>Joueur</th>
+                <th>Club</th>
+                <th style="text-align: center;">Victoires</th>
+                <th style="text-align: center;">V/M</th>
+                <th style="text-align: center;">Matchs joués</th>
+                <th style="text-align: center;">Indice (TD-TR)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in classement %}
+            <tr>
+                <td style="text-align: center; font-weight: bold;">
+                    {% if loop.index == 1 %}🥇
+                    {% elif loop.index == 2 %}🥈
+                    {% elif loop.index == 3 %}🥉
+                    {% else %}{{ loop.index }}
+                    {% endif %}
+                </td>
+                <td><strong>{{ entry.username }}</strong></td>
+                <td>{{ entry.club if entry.club else '-' }}</td>
+                <td style="text-align: center; font-weight: bold; color: #27ae60;">{{ entry.victoires }}</td>
+                <td style="text-align: center;">
+                    {% if entry.rencontres_jouees > 0 %}
+                        {{ "%.3f"|format(entry.victoires / entry.rencontres_jouees) }}
+                    {% else %}
+                        0.000
+                    {% endif %}
+                </td>
+                <td style="text-align: center;">{{ entry.rencontres_jouees }}</td>
+                <td style="text-align: center; font-weight: bold; color: #2c3e50;">
+                    {{ entry.touches_donnees - entry.touches_recues }}
+                    <br><small style="color: #7f8c8d;">({{ entry.touches_donnees }}-{{ entry.touches_recues }})</small>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
 
 {% if rencontres %}
     <div class="card">
-        <table>
+        <h3>📋 Liste des rencontres</h3>
+        <table style="margin-top: 15px;">
             <thead>
                 <tr>
                     <th>#</th>

@@ -4,13 +4,49 @@
 
 {% block content %}
 <div class="card">
-    <h2>Générer les rencontres</h2>
+    <h2>⚙️ Préparation de la phase</h2>
     <p><strong>Événement:</strong> {{ evenement.nom }}</p>
     <p><strong>Phase:</strong> {{ phase.nom }}</p>
 </div>
 
+<!-- OPTION : Régénérer les poules (si joueur ajouté après) -->
+<div class="card" style="border-left: 5px solid #f39c12;">
+    <h3>� Régénérer les poules</h3>
+    <p><strong>{{ joueurs|length }} joueurs actuellement inscrits</strong></p>
+    
+    {% set config = phase.configuration or {} %}
+    {% set joueurs_min = config.get('joueurs_min', 3) %}
+    {% set joueurs_max = config.get('joueurs_max', 8) %}
+    {% set joueurs_souhaite = config.get('joueurs_souhaite', 6) %}
+    
+    <div style="background: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0; border-left: 3px solid #f39c12;">
+        <p style="margin: 5px 0;"><strong>⚠️ Utilisez cette fonction uniquement si :</strong></p>
+        <ul style="margin: 10px 0;">
+            <li>Vous avez ajouté des joueurs après le lancement</li>
+            <li>Vous voulez modifier la répartition des poules</li>
+        </ul>
+        <p style="margin: 5px 0; color: #856404;"><strong>Configuration des poules :</strong></p>
+        <ul style="margin: 10px 0;">
+            <li>Minimum par poule : {{ joueurs_min }} joueurs</li>
+            <li>Maximum par poule : {{ joueurs_max }} joueurs</li>
+            <li>Nombre souhaité : {{ joueurs_souhaite }} joueurs</li>
+        </ul>
+    </div>
+    
+    <form method="POST" action="{{ url_for('generer_poules', evenement_id=evenement.id, phase_id=phase.id) }}" style="margin-top: 15px;">
+        <button type="submit" class="btn btn-warning btn-large" style="font-size: 1.1em;" onclick="return confirm('⚠️ Régénérer les poules ?\n\nCela va supprimer les poules existantes et créer de nouvelles poules.\nLes rencontres existantes resteront inchangées.\n\nContinuer ?');">
+            🔄 Régénérer les poules
+        </button>
+    </form>
+    
+    <p style="color: #856404; margin-top: 10px;">
+        <small>💡 Cette action est utile si vous avez inscrit de nouveaux joueurs après avoir lancé la compétition</small>
+    </p>
+</div>
+
+<!-- ÉTAPE 2 : Liste des joueurs -->
 <div class="card">
-    <h3>Joueurs inscrits ({{ joueurs|length }})</h3>
+    <h3>👥 Joueurs inscrits ({{ joueurs|length }})</h3>
     <ul>
         {% for joueur in joueurs %}
             <li>{{ joueur.joueur.username if joueur.joueur else 'N/A' }}</li>
@@ -18,31 +54,37 @@
     </ul>
 </div>
 
+<!-- ÉTAPE 3 : Configuration de la phase -->
 <div class="card">
-    <h3>Configuration</h3>
+    <h3>⚙️ Configuration</h3>
     <p><strong>Format:</strong> {{ phase.format.nom if phase.format else 'N/A' }}</p>
     <p><strong>Type:</strong> {{ phase.type.nom if phase.type else 'N/A' }}</p>
     
     {% set type_nom = phase.type.nom if phase.type and phase.type.nom else phase.type if phase.type else 'N/A' %}
     {% if type_nom == 'Groupe' %}
-        <p>🔄 Génération de toutes les rencontres (tous contre tous)</p>
-        <p>Nombre de rencontres: {{ (joueurs|length * (joueurs|length - 1)) // 2 }}</p>
+        <p>🔄 Génération de toutes les rencontres (tous contre tous PAR POULE)</p>
     {% elif type_nom == 'Match' %}
         <p>🏆 Génération d'un bracket d'élimination directe</p>
     {% else %}
         <p>📋 Génération des rencontres selon la configuration</p>
-        <p>Nombre de rencontres: {{ (joueurs|length * (joueurs|length - 1)) // 2 }}</p>
     {% endif %}
 </div>
 
-<div class="card">
-    <form method="POST">
-        <p style="margin-bottom: 20px;">Êtes-vous sûr de vouloir générer les rencontres ? Cette action créera toutes les rencontres nécessaires.</p>
-        
-        <div class="actions">
-            <button type="submit" class="btn btn-success">✅ Générer les rencontres</button>
-            <a href="{{ url_for('manage_inscriptions', evenement_id=evenement.id) }}" class="btn btn-secondary">Annuler</a>
-        </div>
-    </form>
+<!-- Info : Les rencontres sont déjà créées -->
+<div class="card" style="border-left: 5px solid #27ae60; background: #d4edda;">
+    <h3 style="color: #155724;">✅ Rencontres déjà générées</h3>
+    <p style="color: #155724; margin: 10px 0;">
+        Les rencontres ont été automatiquement créées lors du lancement de la compétition.<br>
+        Chaque poule contient toutes les rencontres (tous contre tous).
+    </p>
+    
+    <div class="actions" style="margin-top: 15px;">
+        <a href="{{ url_for('view_rencontres', evenement_id=evenement.id, phase_id=phase.id) }}" class="btn btn-success">
+            📋 Voir les rencontres
+        </a>
+        <a href="{{ url_for('view_feuille_poule', evenement_id=evenement.id, phase_id=phase.id) }}" class="btn btn-primary">
+            ⚔️ Saisir les résultats
+        </a>
+    </div>
 </div>
 {% endblock %}

@@ -4,68 +4,76 @@
 
 {% block content %}
 <div class="card">
-    <h2>Classements - {{ evenement.nom }}</h2>
+    <h2>🏆 Classements - {{ evenement.nom }}</h2>
+    <p style="color: #7f8c8d; margin-top: 10px;">
+        Classements calculés en temps réel à partir des résultats saisis
+    </p>
 </div>
 
-<!-- Classement général -->
-{% if classements %}
-    <div class="card">
-        <h3>Classement général</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Position</th>
-                    <th>Joueur</th>
-                    <th>Points</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in classements %}
-                <tr>
-                    <td>{{ loop.index }}</td>
-                    <td>{{ item.joueur }}</td>
-                    <td><strong>{{ item.points }}</strong></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-{% endif %}
-
 <!-- Classements par phase -->
-{% if phases %}
-    {% for phase in phases %}
-        {% if phase.classements %}
-            <div class="card">
-                <h3>{{ phase.nom }}</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Position</th>
-                            <th>Joueur</th>
-                            <th>Points</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for classement in phase.classements %}
-                        <tr>
-                            <td>{{ loop.index }}</td>
-                            <td>{{ classement.joueur }}</td>
-                            <td><strong>{{ classement.points }}</strong></td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+{% if phases_classements %}
+    {% for item in phases_classements %}
+        {% if item.classement and item.classement|length > 0 %}
+        <div class="card">
+            <h3>{{ item.phase.nom }}</h3>
+            <table style="margin-top: 15px;">
+                <thead>
+                    <tr>
+                        <th style="width: 80px;">Position</th>
+                        <th>Joueur</th>
+                        <th>Club</th>
+                        <th style="text-align: center;">Points</th>
+                        <th style="text-align: center;">Victoires</th>
+                        <th style="text-align: center;">Nuls</th>
+                        <th style="text-align: center;">Défaites</th>
+                        <th style="text-align: center;">Matchs joués</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in item.classement %}
+                    <tr>
+                        <td style="text-align: center; font-weight: bold; font-size: 1.1em;">
+                            {% if loop.index == 1 %}
+                                <span style="font-size: 1.5em;">🥇</span> 1er
+                            {% elif loop.index == 2 %}
+                                <span style="font-size: 1.5em;">🥈</span> 2e
+                            {% elif loop.index == 3 %}
+                                <span style="font-size: 1.5em;">🥉</span> 3e
+                            {% else %}
+                                {{ loop.index }}e
+                            {% endif %}
+                        </td>
+                        <td><strong>{{ entry.username }}</strong></td>
+                        <td>{{ entry.club if entry.club else '-' }}</td>
+                        <td style="text-align: center; font-weight: bold; color: #27ae60; font-size: 1.1em;">
+                            {{ entry.points }}
+                        </td>
+                        <td style="text-align: center; color: #27ae60;">{{ entry.victoires }}</td>
+                        <td style="text-align: center; color: #f39c12;">{{ entry.nuls }}</td>
+                        <td style="text-align: center; color: #e74c3c;">{{ entry.defaites }}</td>
+                        <td style="text-align: center;">{{ entry.rencontres_jouees }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="card">
+            <h3>{{ item.phase.nom }}</h3>
+            <p style="text-align: center; color: #7f8c8d; padding: 20px;">
+                Aucun résultat saisi pour cette phase.<br>
+                Le classement sera affiché une fois les premiers résultats enregistrés.
+            </p>
+        </div>
         {% endif %}
     {% endfor %}
-{% endif %}
-
-{% if not classements and not phases %}
+{% else %}
     <div class="card">
-        <p style="text-align: center; color: #7f8c8d;">
-            Aucun classement disponible pour le moment.<br>
-            Les classements seront calculés une fois les résultats saisis.
+        <p style="text-align: center; color: #7f8c8d; padding: 30px;">
+            ⚠️ Aucune phase configurée pour cet événement.<br>
+            <a href="{{ url_for('manage_phases', evenement_id=evenement.id) }}" class="btn" style="margin-top: 15px;">
+                Configurer les phases
+            </a>
         </p>
     </div>
 {% endif %}

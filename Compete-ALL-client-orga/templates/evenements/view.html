@@ -44,10 +44,17 @@
 <!-- Actions rapides -->
 <div class="card">
     <h3>Actions rapides</h3>
-    <div class="actions" style="margin-top: 15px;">
-        <a href="{{ url_for('manage_phases', evenement_id=evenement.id) }}" class="btn">Gérer les phases</a>
-        <a href="{{ url_for('manage_inscriptions', evenement_id=evenement.id) }}" class="btn">Gérer les inscriptions</a>
-        <a href="{{ url_for('view_classements', evenement_id=evenement.id) }}" class="btn">Voir les classements</a>
+    <div class="actions" style="margin-top: 15px; display: flex; flex-wrap: wrap; gap: 10px;">
+        <a href="{{ url_for('manage_phases', evenement_id=evenement.id) }}" class="btn">⚙️ Gérer les phases</a>
+        <a href="{{ url_for('manage_inscriptions', evenement_id=evenement.id) }}" class="btn">👥 Gérer les inscriptions</a>
+        <a href="{{ url_for('view_classements', evenement_id=evenement.id) }}" class="btn">📊 Voir les classements</a>
+        
+        <!-- Bouton Lancer la compétition (toujours visible) -->
+        <form method="POST" action="{{ url_for('lancer_competition', evenement_id=evenement.id) }}" 
+              style="display: inline; margin: 0;" 
+              onsubmit="return confirm('🚀 LANCER LA COMPÉTITION ?\n\n✅ Inscrire tous les joueurs à la première phase\n📊 Générer les poules automatiquement\n⚔️ Créer toutes les rencontres\n\nContinuer ?');">
+            <button type="submit" class="btn btn-success" style="font-weight: bold; font-size: 1.1em;">🚀 Lancer la compétition</button>
+        </form>
     </div>
 </div>
 
@@ -89,6 +96,52 @@
         </p>
     {% endif %}
 </div>
+
+<!-- Classements provisoires par phase -->
+{% if phases_classements %}
+    {% for phase in phases %}
+        {% if phases_classements[phase.id] and phases_classements[phase.id]|length > 0 %}
+        <div class="card">
+            <h3>🏆 Classement provisoire - {{ phase.nom }}</h3>
+            <table style="margin-top: 15px;">
+                <thead>
+                    <tr>
+                        <th style="width: 60px;">Position</th>
+                        <th>Joueur</th>
+                        <th>Club</th>
+                        <th style="text-align: center;">Points</th>
+                        <th style="text-align: center;">V-N-D</th>
+                        <th style="text-align: center;">Matchs joués</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in phases_classements[phase.id][:10] %}
+                    <tr>
+                        <td style="text-align: center; font-weight: bold;">
+                            {% if loop.index == 1 %}🥇
+                            {% elif loop.index == 2 %}🥈
+                            {% elif loop.index == 3 %}🥉
+                            {% else %}{{ loop.index }}
+                            {% endif %}
+                        </td>
+                        <td><strong>{{ entry.username }}</strong></td>
+                        <td>{{ entry.club if entry.club else '-' }}</td>
+                        <td style="text-align: center; font-weight: bold; color: #27ae60;">{{ entry.points }}</td>
+                        <td style="text-align: center;">{{ entry.victoires }}-{{ entry.nuls }}-{{ entry.defaites }}</td>
+                        <td style="text-align: center;">{{ entry.rencontres_jouees }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% if phases_classements[phase.id]|length > 10 %}
+            <p style="text-align: center; color: #7f8c8d; margin-top: 10px; font-size: 0.9em;">
+                ... et {{ phases_classements[phase.id]|length - 10 }} autre(s) joueur(s)
+            </p>
+            {% endif %}
+        </div>
+        {% endif %}
+    {% endfor %}
+{% endif %}
 
 <div style="margin-top: 20px;">
     <a href="{{ url_for('index') }}" class="btn btn-secondary">← Retour aux événements</a>

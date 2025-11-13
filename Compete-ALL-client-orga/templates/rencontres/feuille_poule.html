@@ -1,0 +1,852 @@
+{% extends "base.html" %}
+
+{% block title %}Feuille de Poule - {{ phase.nom }}{% endblock %}
+
+{% block content %}
+<style>
+.feuille-poule-container {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.feuille-poule-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 30px;
+    border-radius: 10px;
+    margin-bottom: 30px;
+    text-align: center;
+}
+
+.feuille-poule-header h1 {
+    margin: 0 0 10px 0;
+    font-size: 2em;
+}
+
+.feuille-poule-header p {
+    margin: 5px 0;
+    opacity: 0.9;
+}
+
+.poule-matrix {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.poule-matrix th,
+.poule-matrix td {
+    border: 2px solid #e0e0e0;
+    padding: 12px 8px;
+    text-align: center;
+}
+
+.poule-matrix thead th {
+    background: #667eea;
+    color: white;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.poule-matrix tbody th {
+    background: #f8f9fa;
+    font-weight: 600;
+    text-align: left;
+    padding-left: 15px;
+}
+
+.poule-matrix .player-number {
+    width: 50px;
+    background: #667eea;
+    color: white;
+    font-weight: bold;
+}
+
+.poule-matrix .player-name {
+    min-width: 150px;
+    text-align: left;
+}
+
+.poule-matrix .player-club {
+    min-width: 120px;
+    color: #666;
+    font-size: 0.9em;
+}
+
+.match-cell {
+    position: relative;
+    min-width: 60px;
+}
+
+.match-cell input {
+    width: 50px;
+    padding: 8px;
+    border: 2px solid #ddd;
+    border-radius: 4px;
+    text-align: center;
+    font-size: 1em;
+    font-weight: bold;
+    transition: all 0.3s;
+}
+
+.match-cell input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.match-cell input.victory {
+    background: #d4edda;
+    border-color: #28a745;
+    color: #155724;
+}
+
+.match-cell input.score {
+    background: #fff3cd;
+    border-color: #ffc107;
+}
+
+.match-cell input.pending {
+    background: #ffe5cc;
+    border-color: #fd7e14;
+    border-width: 2px;
+    border-style: dashed;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.match-cell input.error {
+    background: #f8d7da;
+    border-color: #dc3545;
+    color: #721c24;
+    animation: shake 0.5s;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+    20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+.match-cell.diagonal {
+    background: #e9ecef;
+    font-weight: bold;
+    font-size: 1.2em;
+    color: #adb5bd;
+}
+
+.error-tooltip {
+    position: absolute;
+    top: -40px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #dc3545;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    white-space: nowrap;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.error-tooltip::after {
+    content: '';
+    position: absolute;
+    bottom: -5px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 5px solid #dc3545;
+}
+
+.save-indicator {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 12px 24px;
+    background: #28a745;
+    color: white;
+    border-radius: 25px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    z-index: 1000;
+    display: none;
+    animation: slideIn 0.3s;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.actions-bar {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.progress-info {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.progress-bar {
+    height: 8px;
+    background: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 10px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    transition: width 0.3s;
+}
+
+.legend {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}
+
+.legend h4 {
+    margin-top: 0;
+}
+
+.legend-item {
+    display: inline-block;
+    margin-right: 20px;
+    margin-bottom: 10px;
+}
+
+.legend-item .sample {
+    display: inline-block;
+    width: 40px;
+    padding: 5px;
+    border: 2px solid;
+    border-radius: 4px;
+    text-align: center;
+    font-weight: bold;
+    margin-right: 8px;
+}
+
+.legend-item .sample.v {
+    background: #d4edda;
+    border-color: #28a745;
+    color: #155724;
+}
+
+.legend-item .sample.num {
+    background: #fff3cd;
+    border-color: #ffc107;
+}
+</style>
+
+<div class="feuille-poule-header">
+    <h1>📋 FEUILLE DE POULE</h1>
+    <p><strong>{{ phase.nom }}</strong></p>
+    <p>{{ evenement.nom }} - {{ evenement.date_debut[:10] }}</p>
+</div>
+
+<div class="actions-bar">
+    <a href="{{ url_for('view_rencontres', evenement_id=evenement.id, phase_id=phase.id) }}" class="btn btn-secondary">← Retour aux rencontres</a>
+    
+    <!-- Bouton Générer les poules -->
+    <form method="POST" action="{{ url_for('generer_poules', evenement_id=evenement.id, phase_id=phase.id) }}" style="display: inline; margin: 0;">
+        <button type="submit" class="btn btn-primary" onclick="return confirm('Générer les poules automatiquement ? Les poules existantes seront supprimées.');">
+            🎲 Générer les poules
+        </button>
+    </form>
+    
+    <button onclick="window.print()" class="btn">🖨️ Imprimer</button>
+    <a href="{{ url_for('view_rencontres', evenement_id=evenement.id, phase_id=phase.id) }}#" class="btn btn-info">📄 PDF Vierge</a>
+    <a href="{{ url_for('view_rencontres', evenement_id=evenement.id, phase_id=phase.id) }}#" class="btn btn-success">💾 PDF Rempli</a>
+</div>
+
+<div class="progress-info">
+    <strong>Poules :</strong> {{ poules|length }} poule(s) configurée(s)
+    {% if poules %}
+        {% set total_joueurs = poules|sum(attribute='joueurs')|length if poules[0].joueurs else 0 %}
+        - {{ total_joueurs }} joueurs répartis
+    {% endif %}
+    <br>
+    <strong>Progression :</strong> <span id="progress-text">0/0 matchs saisis</span>
+    <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+    </div>
+</div>
+
+<div class="legend">
+    <h4>💡 Légende :</h4>
+    <div class="legend-item">
+        <span class="sample v">V</span>
+        <span>Victoire ({{ max_points }} points)</span>
+    </div>
+    <div class="legend-item">
+        <span class="sample num">12</span>
+        <span>Score exact du joueur</span>
+    </div>
+    <div class="legend-item">
+        <span class="sample" style="background: #ffe5cc; border: 2px dashed #fd7e14;">?</span>
+        <span>Score adversaire manquant (à remplir)</span>
+    </div>
+    <div class="legend-item">
+        <span class="sample" style="background: #f8d7da; border-color: #dc3545; color: #721c24;">!</span>
+        <span>Erreur de saisie (score > max, égalité, double victoire)</span>
+    </div>
+    <div class="legend-item">
+        <span class="sample" style="background: #e9ecef; border-color: #adb5bd;">X</span>
+        <span>Pas de match contre soi-même</span>
+    </div>
+</div>
+
+{% for poule in poules %}
+<div class="card" style="margin-bottom: 30px;">
+    <h3 style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px; margin: -20px -20px 20px -20px; border-radius: 8px 8px 0 0;">
+        {{ poule.nom }} - {{ poule.joueurs|length }} joueurs
+    </h3>
+
+<div class="feuille-poule-container">
+    <table class="poule-matrix">
+        <thead>
+            <tr>
+                <th class="player-number">N°</th>
+                <th class="player-name">Nom</th>
+                <th class="player-club">Club</th>
+                {% for i in range(poule.joueurs|length) %}
+                <th>{{ i + 1 }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for joueur in poule.joueurs %}
+            {% set joueur_id = joueur.id %}
+            {% set joueur_details = joueurs_details.get(joueur_id, joueur) %}
+            <tr>
+                <td class="player-number">{{ loop.index }}</td>
+                <td class="player-name"><strong>{{ joueur_details.username if joueur_details else joueur.username }}</strong></td>
+                <td class="player-club">{{ joueur_details.club if joueur_details and joueur_details.club else '-' }}</td>
+                
+                {% for adversaire in poule.joueurs %}
+                {% set adversaire_id = adversaire.id %}
+                
+                {% if joueur_id == adversaire_id %}
+                    <!-- Diagonale - pas de match contre soi-même -->
+                    <td class="match-cell diagonal">X</td>
+                {% else %}
+                    <!-- Case de saisie de résultat -->
+                    <td class="match-cell">
+                        {% set result = matrice.get(joueur_id, {}).get(adversaire_id) %}
+                        {% if result %}
+                            {% if result.points == max_points %}
+                                <input type="text" 
+                                       value="V" 
+                                       class="victory"
+                                       data-joueur="{{ joueur_id }}" 
+                                       data-adversaire="{{ adversaire_id }}"
+                                       data-rencontre="{{ result.rencontre_id }}"
+                                       onchange="saveResult(this)">
+                            {% else %}
+                                <input type="text" 
+                                       value="{{ result.points if result.points is not none else '' }}" 
+                                       class="score"
+                                       data-joueur="{{ joueur_id }}" 
+                                       data-adversaire="{{ adversaire_id }}"
+                                       data-rencontre="{{ result.rencontre_id }}"
+                                       onchange="saveResult(this)">
+                            {% endif %}
+                        {% else %}
+                            <input type="text" 
+                                   value="" 
+                                   placeholder="-"
+                                   data-joueur="{{ joueur_id }}" 
+                                   data-adversaire="{{ adversaire_id }}"
+                                   onchange="saveResult(this)">
+                        {% endif %}
+                    </td>
+                {% endif %}
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+</div>
+{% endfor %}
+
+<!-- Classement en dessous -->
+{% if classement and classement|length > 0 %}
+<div class="card" style="margin-top: 30px;">
+    <h3>🏆 Classement provisoire</h3>
+    <table style="margin-top: 15px;">
+        <thead>
+            <tr>
+                <th style="width: 80px;">Position</th>
+                <th>Joueur</th>
+                <th>Club</th>
+                <th style="text-align: center;">Victoires</th>
+                <th style="text-align: center;">V/M</th>
+                <th style="text-align: center;">Matchs joués</th>
+                <th style="text-align: center;">Indice (TD-TR)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in classement %}
+            <tr>
+                <td style="text-align: center; font-weight: bold;">
+                    {% if loop.index == 1 %}🥇 1er
+                    {% elif loop.index == 2 %}🥈 2e
+                    {% elif loop.index == 3 %}🥉 3e
+                    {% else %}{{ loop.index }}e
+                    {% endif %}
+                </td>
+                <td><strong>{{ entry.username }}</strong></td>
+                <td>{{ entry.club if entry.club else '-' }}</td>
+                <td style="text-align: center; font-weight: bold; color: #27ae60;">{{ entry.victoires }}</td>
+                <td style="text-align: center;">
+                    {% if entry.rencontres_jouees > 0 %}
+                        {{ "%.3f"|format(entry.victoires / entry.rencontres_jouees) }}
+                    {% else %}
+                        0.000
+                    {% endif %}
+                </td>
+                <td style="text-align: center;">{{ entry.rencontres_jouees }}</td>
+                <td style="text-align: center; font-weight: bold; color: #2c3e50;">
+                    {{ entry.touches_donnees - entry.touches_recues }}
+                    <br><small style="color: #7f8c8d;">({{ entry.touches_donnees }}-{{ entry.touches_recues }})</small>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<div class="save-indicator" id="save-indicator">
+    ✓ Enregistré
+</div>
+
+<script>
+const maxPoints = {{ max_points }};
+const phaseId = "{{ phase.id }}";
+const evenementId = "{{ evenement.id }}";
+
+// Calculer et afficher la progression
+function updateProgress() {
+    const inputs = document.querySelectorAll('.match-cell input');
+    
+    // Compter les paires de résultats (chaque match a 2 cases)
+    // On divise par 2 car la matrice est symétrique
+    let totalMatches = inputs.length / 2;
+    let filledMatches = 0;
+    
+    // Utiliser un Set pour suivre les matchs déjà comptés
+    const countedPairs = new Set();
+    
+    inputs.forEach(input => {
+        if (input.value.trim() !== '') {
+            const joueurId = input.dataset.joueur;
+            const adversaireId = input.dataset.adversaire;
+            
+            // Créer une clé unique pour cette paire (ordre normalisé)
+            const pairKey = [joueurId, adversaireId].sort().join('-');
+            
+            if (!countedPairs.has(pairKey)) {
+                countedPairs.add(pairKey);
+                filledMatches++;
+            }
+        }
+    });
+    
+    const percentage = (filledMatches / totalMatches * 100).toFixed(0);
+    document.getElementById('progress-text').textContent = `${filledMatches}/${totalMatches} matchs saisis`;
+    document.getElementById('progress-fill').style.width = `${percentage}%`;
+}
+
+// Trouver l'input de l'adversaire correspondant
+function findOpponentInput(joueurId, adversaireId) {
+    const inputs = document.querySelectorAll('.match-cell input');
+    for (let inp of inputs) {
+        if (inp.dataset.joueur === adversaireId && inp.dataset.adversaire === joueurId) {
+            return inp;
+        }
+    }
+    return null;
+}
+
+// Afficher une erreur sur un input
+function showError(input, message) {
+    input.classList.remove('victory', 'score');
+    input.classList.add('error');
+    
+    // Supprimer l'ancien tooltip s'il existe
+    const oldTooltip = input.parentElement.querySelector('.error-tooltip');
+    if (oldTooltip) oldTooltip.remove();
+    
+    // Créer le tooltip d'erreur
+    const tooltip = document.createElement('div');
+    tooltip.className = 'error-tooltip';
+    tooltip.textContent = message;
+    input.parentElement.style.position = 'relative';
+    input.parentElement.appendChild(tooltip);
+    
+    // Supprimer le tooltip après 3 secondes
+    setTimeout(() => {
+        if (tooltip.parentElement) {
+            tooltip.remove();
+        }
+    }, 3000);
+}
+
+// Effacer les erreurs
+function clearError(input) {
+    input.classList.remove('error');
+    const tooltip = input.parentElement.querySelector('.error-tooltip');
+    if (tooltip) tooltip.remove();
+}
+
+// Déterminer qui est le vainqueur d'un match
+function getWinner(value1, value2) {
+    const v1Upper = value1.toUpperCase();
+    const v2Upper = value2.toUpperCase();
+    
+    // Si un des deux a "V", il est vainqueur (sauf si les deux ont V = erreur)
+    if (v1Upper === 'V' && v2Upper !== 'V') return 'joueur1';
+    if (v2Upper === 'V' && v1Upper !== 'V') return 'joueur2';
+    if (v1Upper === 'V' && v2Upper === 'V') return 'error'; // Double victoire
+    
+    // Sinon, comparer les scores numériques
+    if (/^\d+$/.test(value1) && /^\d+$/.test(value2)) {
+        const score1 = parseInt(value1);
+        const score2 = parseInt(value2);
+        
+        if (score1 > score2) return 'joueur1';
+        if (score2 > score1) return 'joueur2';
+        return 'tie'; // Égalité
+    }
+    
+    // Si seulement un score numérique
+    if (/^\d+$/.test(value1) && !v2Upper) return null; // Pas encore de match complet
+    if (/^\d+$/.test(value2) && !v1Upper) return null;
+    
+    return null;
+}
+
+// Valider la cohérence des deux cases d'un match
+function validateMatch(input, opponentInput, valueUpper, opponentValue) {
+    // Cas 1: Score numérique dépassant le maximum
+    if (/^\d+$/.test(input.value)) {
+        const score = parseInt(input.value);
+        if (score > maxPoints) {
+            showError(input, `Score max: ${maxPoints}`);
+            return false;
+        }
+    }
+    
+    // Si l'adversaire n'a pas encore saisi, pas de validation croisée
+    if (!opponentInput || !opponentValue || opponentValue.trim() === '') {
+        return true;
+    }
+    
+    const opponentUpper = opponentValue.toUpperCase();
+    
+    // Cas 2: Double victoire
+    if (valueUpper === 'V' && opponentUpper === 'V') {
+        showError(input, 'Double victoire impossible');
+        showError(opponentInput, 'Double victoire impossible');
+        return false;
+    }
+    
+    // Cas 3: Égalité de scores
+    if (/^\d+$/.test(input.value) && /^\d+$/.test(opponentValue)) {
+        const score1 = parseInt(input.value);
+        const score2 = parseInt(opponentValue);
+        
+        if (score1 === score2) {
+            showError(input, 'Égalité interdite');
+            showError(opponentInput, 'Égalité interdite');
+            return false;
+        }
+    }
+    
+    // Cas 4: V contre un score >= maxPoints (incohérent)
+    if (valueUpper === 'V' && /^\d+$/.test(opponentValue)) {
+        const opponentScore = parseInt(opponentValue);
+        if (opponentScore >= maxPoints) {
+            showError(input, `Incohérent: V mais adversaire a ${opponentScore} pts`);
+            showError(opponentInput, `Incohérent: ${opponentScore} pts contre V`);
+            return false;
+        }
+    }
+    
+    if (opponentUpper === 'V' && /^\d+$/.test(input.value)) {
+        const score = parseInt(input.value);
+        if (score >= maxPoints) {
+            showError(input, `Incohérent: ${score} pts contre V`);
+            showError(opponentInput, `Incohérent: V mais adversaire a ${score} pts`);
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+// Appliquer le style visuel selon le résultat
+function applyVisualStyle(input, opponentInput) {
+    const value = input.value.trim();
+    const opponentValue = opponentInput ? opponentInput.value.trim() : '';
+    
+    // Effacer les anciennes classes de l'input
+    input.classList.remove('victory', 'score', 'error', 'pending');
+    
+    // Si l'input est vide
+    if (!value) {
+        // Si l'adversaire a un score, on ne touche PAS à l'adversaire ici
+        // (il sera géré par son propre applyVisualStyle)
+        return;
+    }
+    
+    const valueUpper = value.toUpperCase();
+    
+    // Si l'adversaire n'a pas encore de valeur, marquer l'adversaire comme pending
+    if (!opponentValue) {
+        // L'input actuel a une valeur, on lui met le style approprié
+        if (valueUpper === 'V') {
+            input.classList.add('victory');
+        } else if (/^\d+$/.test(value)) {
+            input.classList.add('score');
+        }
+        
+        // Marquer la case adverse comme "en attente" uniquement si elle est vide
+        if (opponentInput) {
+            opponentInput.classList.remove('victory', 'score', 'error');
+            opponentInput.classList.add('pending');
+        }
+        return;
+    }
+    
+    // Si les deux cases sont remplies, effacer le pending de l'adversaire
+    if (opponentInput) {
+        opponentInput.classList.remove('pending');
+    }
+    
+    // Déterminer le vainqueur
+    const winner = getWinner(value, opponentValue);
+    
+    if (winner === 'error' || winner === 'tie') {
+        // Erreur déjà gérée par validateMatch
+        return;
+    }
+    
+    if (winner === 'joueur1') {
+        // input est le vainqueur
+        input.classList.add('victory');
+        if (opponentInput) {
+            opponentInput.classList.remove('pending');
+            opponentInput.classList.add('score');
+        }
+    } else if (winner === 'joueur2') {
+        // opponentInput est le vainqueur
+        input.classList.add('score');
+        if (opponentInput) {
+            opponentInput.classList.remove('pending');
+            opponentInput.classList.add('victory');
+        }
+    }
+}
+
+// Sauvegarder un résultat
+async function saveResult(input) {
+    const value = input.value.trim();
+    const joueurId = input.dataset.joueur;
+    const adversaireId = input.dataset.adversaire;
+    
+    // Effacer les erreurs précédentes
+    clearError(input);
+    
+    // Si vide, effacer la case
+    if (value === '') {
+        input.classList.remove('victory', 'score', 'error');
+        const opponentInput = findOpponentInput(joueurId, adversaireId);
+        if (opponentInput) {
+            clearError(opponentInput);
+        }
+        return;
+    }
+    
+    let valueUpper = value.toUpperCase();
+    
+    // Conversion automatique: si score numérique = maxPoints, convertir en V
+    if (/^\d+$/.test(value)) {
+        const score = parseInt(value);
+        if (score === maxPoints) {
+            valueUpper = 'V';
+            input.value = 'V';
+        }
+    }
+    
+    // Validation du format
+    if (valueUpper !== 'V' && valueUpper !== 'D' && !/^\d+$/.test(value)) {
+        showError(input, 'Format invalide (V, D ou nombre)');
+        setTimeout(() => { input.value = ''; clearError(input); }, 2000);
+        return;
+    }
+    
+    // Trouver l'input de l'adversaire
+    const opponentInput = findOpponentInput(joueurId, adversaireId);
+    const opponentValue = opponentInput ? opponentInput.value : '';
+    
+    // Valider la cohérence
+    if (!validateMatch(input, opponentInput, valueUpper, opponentValue)) {
+        // Ne pas sauvegarder si erreur
+        return;
+    }
+    
+    // Effacer les erreurs de l'adversaire si tout est OK
+    if (opponentInput) {
+        clearError(opponentInput);
+    }
+    
+    // Normaliser l'affichage de V
+    if (valueUpper === 'V') {
+        input.value = 'V';
+    }
+    
+    // Appliquer les styles visuels selon qui gagne
+    applyVisualStyle(input, opponentInput);
+    if (opponentInput && opponentValue) {
+        applyVisualStyle(opponentInput, input);
+    }
+    
+    // Enregistrer via la route proxy Flask (évite les problèmes CORS)
+    try {
+        const response = await fetch(`/evenements/${evenementId}/phases/${phaseId}/feuille-poule/save`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                joueur_id: joueurId,
+                adversaire_id: adversaireId,
+                value: value,
+                max_points: maxPoints
+            })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            console.log('Résultat sauvegardé:', data);
+            
+            // Mettre à jour le data-rencontre pour les futures modifications
+            input.dataset.rencontre = data.rencontre_id;
+            
+            showSaveIndicator();
+            updateProgress();
+            
+            // Recharger la page après 1 seconde pour mettre à jour le classement
+            setTimeout(() => {
+                location.reload();
+            }, 1000);
+        } else {
+            const errorData = await response.json();
+            alert('Erreur lors de la sauvegarde: ' + (errorData.detail || 'Erreur inconnue'));
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        alert('Erreur réseau: ' + error.message);
+    }
+}
+
+// Afficher l'indicateur de sauvegarde
+function showSaveIndicator() {
+    const indicator = document.getElementById('save-indicator');
+    indicator.style.display = 'block';
+    setTimeout(() => {
+        indicator.style.display = 'none';
+    }, 2000);
+}
+
+// Revalider un match après modification
+function revalidateMatch(input) {
+    const joueurId = input.dataset.joueur;
+    const adversaireId = input.dataset.adversaire;
+    const opponentInput = findOpponentInput(joueurId, adversaireId);
+    
+    if (!opponentInput || !opponentInput.value.trim()) {
+        return;
+    }
+    
+    // Revalider les deux cases
+    const value1 = input.value.trim().toUpperCase();
+    const value2 = opponentInput.value.trim().toUpperCase();
+    
+    if (value1 && value2) {
+        clearError(input);
+        clearError(opponentInput);
+        validateMatch(input, opponentInput, value1, value2);
+        validateMatch(opponentInput, input, value2, value1);
+    }
+}
+
+// Initialiser les styles de toutes les cases au chargement
+function initializeAllStyles() {
+    const inputs = document.querySelectorAll('.match-cell input');
+    inputs.forEach(input => {
+        const joueurId = input.dataset.joueur;
+        const adversaireId = input.dataset.adversaire;
+        const opponentInput = findOpponentInput(joueurId, adversaireId);
+        
+        if (input.value.trim() || (opponentInput && opponentInput.value.trim())) {
+            applyVisualStyle(input, opponentInput);
+        }
+    });
+}
+
+// Navigation au clavier
+document.addEventListener('DOMContentLoaded', () => {
+    updateProgress();
+    initializeAllStyles();
+    
+    const inputs = document.querySelectorAll('.match-cell input');
+    inputs.forEach((input, index) => {
+        // Validation en temps réel pendant la saisie
+        input.addEventListener('input', () => {
+            revalidateMatch(input);
+        });
+        
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === 'Tab') {
+                e.preventDefault();
+                const nextIndex = (index + 1) % inputs.length;
+                inputs[nextIndex].focus();
+                inputs[nextIndex].select();
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

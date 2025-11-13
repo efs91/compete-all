@@ -34,10 +34,10 @@ pip install -r requirements.txt
 
 4. Créer un fichier `.env` à la racine du projet avec les informations de connexion à la base de données :
 ```
-DB_HOST=efs91.fr
-DB_USER=carabaffe
-DB_PASSWORD=sbirneb91
-DB_NAME=carabaffe
+DB_HOST=yourhost
+DB_USER=yourlogin
+DB_PASSWORD=yourpass
+DB_NAME=yourdbname
 DB_PORT=3306
 ```
 

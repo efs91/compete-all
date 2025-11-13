@@ -115,6 +115,7 @@ def read_rencontres_complete(phase_id: str, db: Session = Depends(get_db)):
             "phase_id": rencontre.phase_id,
             "evenement_id": rencontre.evenement_id,
             "participants": rencontre.participants,
+            "poule_id": rencontre.poule_id,
             "statut": "Terminée" if has_resultats else "En attente",
             "participants_details": [],
             "resultats": resultats_by_rencontre.get(rencontre.id, [])

@@ -563,15 +563,16 @@ def view_feuille_poule(evenement_id, phase_id):
         rencontres_response = requests.get(f"{API_BASE_URL}/phases/{phase_id}/rencontres-complete")
         rencontres = rencontres_response.json() if rencontres_response.status_code == 200 else []
         
-        # Construire la matrice des résultats
-        # matrice[joueur_i_id][joueur_j_id] = score de i contre j
-        matrice = {}
-        joueurs_details = {}
-        
-        # Récupérer les détails de tous les joueurs EN PARALLÈLE
+        # Récupérer tous les joueur_ids de toutes les poules
         from concurrent.futures import ThreadPoolExecutor, as_completed
         
-        joueur_ids = [j.get('joueur_id') for j in joueurs]
+        all_joueur_ids = set()
+        for poule in poules:
+            for joueur in poule.get('joueurs', []):
+                all_joueur_ids.add(joueur.get('id'))
+        
+        # Récupérer les détails de tous les joueurs EN PARALLÈLE
+        joueurs_details = {}
         
         def fetch_joueur(joueur_id):
             response = requests.get(f"{API_BASE_URL}/joueurs/{joueur_id}")
@@ -580,34 +581,52 @@ def view_feuille_poule(evenement_id, phase_id):
             return joueur_id, None
         
         with ThreadPoolExecutor(max_workers=10) as executor:
-            futures = {executor.submit(fetch_joueur, jid): jid for jid in joueur_ids}
+            futures = {executor.submit(fetch_joueur, jid): jid for jid in all_joueur_ids}
             for future in as_completed(futures):
                 joueur_id, joueur_data = future.result()
                 if joueur_data:
                     joueurs_details[joueur_id] = joueur_data
-                matrice[joueur_id] = {}
         
-        # Remplir la matrice avec les résultats existants
-        for rencontre in rencontres:
-            participants = rencontre.get('participants', [])
-            resultats = rencontre.get('resultats', [])
+        # Construire UNE matrice PAR poule
+        # matrices_by_poule[poule_id][joueur_i_id][joueur_j_id] = score de i contre j
+        matrices_by_poule = {}
+        
+        for poule in poules:
+            poule_id = poule.get('id')
+            matrice_poule = {}
             
-            if len(participants) == 2 and len(resultats) >= 1:
-                # Créer un dict des résultats par participant
-                resultats_dict = {r['participant_id']: r for r in resultats}
+            # Initialiser la matrice pour cette poule
+            for joueur in poule.get('joueurs', []):
+                joueur_id = joueur.get('id')
+                matrice_poule[joueur_id] = {}
+            
+            # Remplir la matrice avec les résultats de cette poule uniquement
+            for rencontre in rencontres:
+                # Ne traiter que les rencontres de cette poule
+                if rencontre.get('poule_id') != poule_id:
+                    continue
+                    
+                participants = rencontre.get('participants', [])
+                resultats = rencontre.get('resultats', [])
                 
-                for participant_id in participants:
-                    if participant_id in resultats_dict:
-                        resultat = resultats_dict[participant_id]
-                        # Trouver l'adversaire
-                        adversaire_id = [p for p in participants if p != participant_id][0] if len(participants) == 2 else None
-                        
-                        if adversaire_id and participant_id in matrice:
-                            matrice[participant_id][adversaire_id] = {
-                                'rencontre_id': rencontre['id'],
-                                'points': resultat.get('points'),
-                                'classement': resultat.get('classement')
-                            }
+                if len(participants) == 2 and len(resultats) >= 1:
+                    # Créer un dict des résultats par participant
+                    resultats_dict = {r['participant_id']: r for r in resultats}
+                    
+                    for participant_id in participants:
+                        if participant_id in resultats_dict:
+                            resultat = resultats_dict[participant_id]
+                            # Trouver l'adversaire
+                            adversaire_id = [p for p in participants if p != participant_id][0] if len(participants) == 2 else None
+                            
+                            if adversaire_id and participant_id in matrice_poule:
+                                matrice_poule[participant_id][adversaire_id] = {
+                                    'rencontre_id': rencontre['id'],
+                                    'points': resultat.get('points'),
+                                    'classement': resultat.get('classement')
+                                }
+            
+            matrices_by_poule[poule_id if poule_id else 'default'] = matrice_poule
         
         # Calculer le classement provisoire
         classement = calculate_provisional_ranking(phase_id, joueurs)
@@ -633,7 +652,7 @@ def view_feuille_poule(evenement_id, phase_id):
                              poules=poules,
                              joueurs=joueurs,
                              joueurs_details=joueurs_details,
-                             matrice=matrice,
+                             matrices_by_poule=matrices_by_poule,
                              classement=classement,
                              max_points=max_points)
     except Exception as e:

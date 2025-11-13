@@ -71,8 +71,8 @@ def generer_poules_automatique(evenement_id: str, phase_id: str, db: Session = D
     
     db.commit()
     
-    # Répartir les joueurs dans les poules (serpentin pour équilibrer)
-    repartition = repartir_joueurs_serpentin(joueurs_inscrits, nb_poules)
+    # Répartir les joueurs dans les poules avec décalages intelligents (éviter même club/nation)
+    repartition = repartir_joueurs_serpentin(joueurs_inscrits, nb_poules, db=db)
     
     for idx_poule, joueurs_poule in enumerate(repartition):
         poule = poules[idx_poule]
@@ -149,29 +149,97 @@ def calcul_nombre_poules(nb_joueurs: int, joueurs_min: int, joueurs_max: int, jo
     
     return max(1, nb_poules)
 
-def repartir_joueurs_serpentin(joueurs_inscrits: List, nb_poules: int) -> List[List]:
-    """Répartit les joueurs en serpentin pour équilibrer les poules selon les seeds"""
+def repartir_joueurs_serpentin(joueurs_inscrits: List, nb_poules: int, db: Session = None) -> List[List]:
+    """
+    Répartit les joueurs en serpentin avec décalages intelligents.
+    Évite de mettre des joueurs du même club ou de la même nation dans la même poule.
+    """
+    from collections import defaultdict
     
     poules = [[] for _ in range(nb_poules)]
     
-    # Méthode serpentin : 
-    # Poule A: 1, 8, 9, 16, 17...
-    # Poule B: 2, 7, 10, 15, 18...
-    # Poule C: 3, 6, 11, 14, 19...
-    # Poule D: 4, 5, 12, 13, 20...
+    # Si pas de DB fournie, faire la répartition simple en serpentin
+    if db is None:
+        for idx, joueur in enumerate(joueurs_inscrits):
+            cycle = idx // nb_poules
+            position_in_cycle = idx % nb_poules
+            
+            if cycle % 2 == 0:
+                poule_index = position_in_cycle
+            else:
+                poule_index = nb_poules - 1 - position_in_cycle
+            
+            poules[poule_index].append(joueur)
+        return poules
     
-    for idx, joueur in enumerate(joueurs_inscrits):
-        # Calculer dans quelle poule mettre ce joueur
+    # Récupérer les détails des joueurs (club, nation) en une seule requête
+    joueur_ids = [j.joueur_id for j in joueurs_inscrits]
+    joueurs_details = db.query(models.Joueur).filter(models.Joueur.id.in_(joueur_ids)).all()
+    joueurs_dict = {j.id: j for j in joueurs_details}
+    
+    # Fonction pour calculer un score de conflit pour une poule
+    def score_conflit(poule, nouveau_joueur_id):
+        """
+        Calcule un score de conflit : plus le score est élevé, plus il y a de conflits.
+        Retourne le nombre de joueurs avec le même club + nombre avec la même nation.
+        """
+        if not poule:
+            return 0
+        
+        nouveau_joueur = joueurs_dict.get(nouveau_joueur_id)
+        if not nouveau_joueur:
+            return 0
+        
+        conflits = 0
+        for inscription in poule:
+            joueur = joueurs_dict.get(inscription.joueur_id)
+            if not joueur:
+                continue
+            
+            # Conflit de club (poids 2)
+            if nouveau_joueur.club and joueur.club and nouveau_joueur.club.strip().lower() == joueur.club.strip().lower():
+                conflits += 2
+            
+            # Conflit de nation (poids 1)
+            if hasattr(nouveau_joueur, 'nation') and hasattr(joueur, 'nation'):
+                if nouveau_joueur.nation and joueur.nation and nouveau_joueur.nation.strip().lower() == joueur.nation.strip().lower():
+                    conflits += 1
+        
+        return conflits
+    
+    # Répartir les joueurs en cherchant la meilleure poule pour chaque joueur
+    for idx, inscription in enumerate(joueurs_inscrits):
+        # Calculer la position serpentin de base
         cycle = idx // nb_poules
         position_in_cycle = idx % nb_poules
         
-        # Alterner la direction : pair = normal, impair = inversé
         if cycle % 2 == 0:
-            poule_index = position_in_cycle
+            poule_base = position_in_cycle
         else:
-            poule_index = nb_poules - 1 - position_in_cycle
+            poule_base = nb_poules - 1 - position_in_cycle
         
-        poules[poule_index].append(joueur)
+        # Chercher la poule avec le moins de conflits (dans un rayon de +/- 2 autour de la position de base)
+        meilleures_poules = []
+        min_conflit = float('inf')
+        
+        # Tester la poule de base et ses voisines
+        for offset in [0, 1, -1, 2, -2]:
+            poule_idx = (poule_base + offset) % nb_poules
+            conflit = score_conflit(poules[poule_idx], inscription.joueur_id)
+            
+            if conflit < min_conflit:
+                min_conflit = conflit
+                meilleures_poules = [poule_idx]
+            elif conflit == min_conflit:
+                meilleures_poules.append(poule_idx)
+        
+        # Si plusieurs poules ont le même score, prendre la plus vide pour équilibrer
+        if len(meilleures_poules) > 1:
+            poule_choisie = min(meilleures_poules, key=lambda p: len(poules[p]))
+        else:
+            poule_choisie = meilleures_poules[0]
+        
+        poules[poule_choisie].append(inscription)
     
     return poules
 

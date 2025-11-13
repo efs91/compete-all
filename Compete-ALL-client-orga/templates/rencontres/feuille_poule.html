@@ -290,8 +290,11 @@
 <div class="progress-info">
     <strong>Poules :</strong> {{ poules|length }} poule(s) configurée(s)
     {% if poules %}
-        {% set total_joueurs = poules|sum(attribute='joueurs')|length if poules[0].joueurs else 0 %}
-        - {{ total_joueurs }} joueurs répartis
+        {% set total_joueurs = namespace(count=0) %}
+        {% for poule in poules %}
+            {% set total_joueurs.count = total_joueurs.count + (poule.joueurs|length) %}
+        {% endfor %}
+        - {{ total_joueurs.count }} joueurs répartis
     {% endif %}
     <br>
     <strong>Progression :</strong> <span id="progress-text">0/0 matchs saisis</span>
@@ -325,6 +328,8 @@
 </div>
 
 {% for poule in poules %}
+{% set poule_id = poule.id if poule.id else 'default' %}
+{% set matrice = matrices_by_poule.get(poule_id, {}) %}
 <div class="card" style="margin-bottom: 30px;">
     <h3 style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px; margin: -20px -20px 20px -20px; border-radius: 8px 8px 0 0;">
         {{ poule.nom }} - {{ poule.joueurs|length }} joueurs

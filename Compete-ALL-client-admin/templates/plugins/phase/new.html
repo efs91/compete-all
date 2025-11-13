@@ -8,6 +8,15 @@
     <a href="{{ url_for('list_phases') }}" class="btn">Retour à la liste</a>
 </div>
 
+<script>
+// Configuration des types depuis le backend
+const typesConfig = {
+{% for t in types %}
+    '{{ t.id }}': {{ t.resultats_config|tojson|safe if t.resultats_config else '{}'|tojson|safe }}{% if not loop.last %},{% endif %}
+{% endfor %}
+};
+</script>
+
 <div class="form-container">
     <form method="post" action="{{ url_for('add_phase') }}">
         <div class="form-section">
@@ -19,25 +28,24 @@
             </div>
             
             <div class="form-group">
-                <label for="type">Type de phase *</label>
-                <select id="type" name="type" required>
-                    <option value="poule" {% if phase.type == 'poule' %}selected{% endif %}>Poule</option>
-                    <option value="elimination" {% if phase.type == 'elimination' %}selected{% endif %}>Élimination directe</option>
-                    <option value="round_robin" {% if phase.type == 'round_robin' %}selected{% endif %}>Round Robin</option>
-                    <option value="swiss" {% if phase.type == 'swiss' %}selected{% endif %}>Système Suisse</option>
-                    <option value="custom" {% if phase.type == 'custom' %}selected{% endif %}>Personnalisé</option>
+                <label for="type_id">Type de résultat *</label>
+                <select id="type_id" name="type_id" required>
+                    <option value="">-- Sélectionner un type --</option>
+                    {% for t in types %}
+                    <option value="{{ t.id }}" {% if phase and phase.type_id == t.id %}selected{% endif %}>{{ t.nom }}</option>
+                    {% endfor %}
                 </select>
+                <p class="help-text">Le type détermine quels champs de résultats seront disponibles (classement, points, actions)</p>
             </div>
             
             <div class="form-group">
-                <label for="type_id">Type (détaillé) *</label>
-                <select id="type_id" name="type_id" required>
-                    <option value="">-- Sélectionnez un type --</option>
-                    {% for type_item in types %}
-                    <option value="{{ type_item.id }}" {% if phase and phase.type_id == type_item.id %}selected{% endif %}>
-                        {{ type_item.nom }}
-                    </option>
-                    {% endfor %}
+                <label for="type">Type de phase *</label>
+                <select id="type" name="type" required>
+                    <option value="poule" {% if phase and phase.type_general == 'poule' %}selected{% endif %}>Poule</option>
+                    <option value="elimination" {% if phase and phase.type_general == 'elimination' %}selected{% endif %}>Élimination directe</option>
+                    <option value="round_robin" {% if phase and phase.type_general == 'round_robin' %}selected{% endif %}>Round Robin</option>
+                    <option value="swiss" {% if phase and phase.type_general == 'swiss' %}selected{% endif %}>Système Suisse</option>
+                    <option value="custom" {% if phase and phase.type_general == 'custom' %}selected{% endif %}>Personnalisé</option>
                 </select>
             </div>
             
@@ -123,77 +131,165 @@
                     <label for="ideal_joueurs_poule">Nombre idéal de joueurs par poule</label>
                     <input type="number" id="ideal_joueurs_poule" name="ideal_joueurs_poule" min="2" value="{{ phase.configuration.ideal_joueurs_poule if phase and phase.configuration and phase.configuration.ideal_joueurs_poule else 5 }}">
                 </div>
+                
+                <div class="form-group checkbox-group">
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="match_nul_possible" name="match_nul_possible" checked onchange="toggleMatchNul()">
+                        <span class="checkmark"></span>
+                        Match nul possible
+                    </label>
+                    <p class="help-text">Si décoché, le champ "Points pour un match nul" sera masqué dans le scoring</p>
+                </div>
             </div>
         </div>
         
         <div class="form-section">
             <h2>Scoring</h2>
             
-            <div class="scoring-section">
-                <h3>Points par place</h3>
-                <div class="place-points-container">
+            <!-- Section Scoring par Classement (pour courses, groupes) -->
+            <div id="scoring-classement" class="scoring-section">
+                <h3>📊 Scoring par Classement</h3>
+                <p style="color: #666; font-size: 0.9em;">Définissez les points par place ou par plage de places</p>
+                
+                <div class="place-ranges-container" id="place-ranges-container">
+                    <!-- Plages par défaut -->
+                    <div class="place-range-row" data-index="0">
+                        <div class="form-group">
+                            <label>De la place</label>
+                            <input type="number" name="range_from[]" min="1" value="1" class="range-from" required>
+                        </div>
+                        <div class="form-group">
+                            <label>À la place</label>
+                            <input type="number" name="range_to[]" min="1" value="1" class="range-to" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Points</label>
+                            <input type="number" name="range_points[]" value="10" class="range-points" required>
+                        </div>
+                        <button type="button" class="btn-remove-range" onclick="removeRange(this)">🗑️</button>
+                    </div>
+                    <div class="place-range-row" data-index="1">
+                        <div class="form-group">
+                            <label>De la place</label>
+                            <input type="number" name="range_from[]" min="1" value="2" class="range-from" required>
+                        </div>
+                        <div class="form-group">
+                            <label>À la place</label>
+                            <input type="number" name="range_to[]" min="1" value="2" class="range-to" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Points</label>
+                            <input type="number" name="range_points[]" value="5" class="range-points" required>
+                        </div>
+                        <button type="button" class="btn-remove-range" onclick="removeRange(this)">🗑️</button>
+                    </div>
+                    <div class="place-range-row" data-index="2">
+                        <div class="form-group">
+                            <label>De la place</label>
+                            <input type="number" name="range_from[]" min="1" value="3" class="range-from" required>
+                        </div>
+                        <div class="form-group">
+                            <label>À la place</label>
+                            <input type="number" name="range_to[]" min="1" value="3" class="range-to" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Points</label>
+                            <input type="number" name="range_points[]" value="0" class="range-points" required>
+                        </div>
+                        <button type="button" class="btn-remove-range" onclick="removeRange(this)">🗑️</button>
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-secondary" onclick="addRange()">+ Ajouter une plage/place</button>
+                    <button type="button" class="btn btn-info" onclick="exportRangesJSON()">📥 Exporter JSON</button>
+                    <button type="button" class="btn btn-info" onclick="document.getElementById('import-json-file').click()">📤 Importer JSON</button>
+                    <input type="file" id="import-json-file" accept=".json" style="display: none;" onchange="importRangesJSON(event)">
+                    
+                    <!-- Templates prédéfinis -->
+                    <div style="margin-left: auto;">
+                        <label style="font-size: 0.9em; color: #666;">Templates :</label>
+                        <select id="template-select" onchange="loadTemplate(this.value)" style="padding: 6px;">
+                            <option value="">-- Choisir un template --</option>
+                            <option value="podium">🥇 Podium (3 places)</option>
+                            <option value="top10">🏆 Top 10</option>
+                            <option value="marathon">🏃 Course longue (20 places)</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group" style="margin-top: 20px;">
+                    <label>
+                        <input type="checkbox" name="last_place_zero" value="1">
+                        La dernière place reçoit toujours 0 points
+                    </label>
+                </div>
+            </div>
+            
+            <!-- Section Scoring par Match (pour duels 1v1) -->
+            <div id="scoring-match" class="scoring-section">
+                <h3>⚔️ Scoring par Match</h3>
+                <p style="color: #666; font-size: 0.9em;">Utilisé pour les matchs en 1 contre 1</p>
+                <div id="match-points-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
                     <div class="form-group">
-                        <label for="place_1">1ère place</label>
-                        <input type="number" id="place_1" name="place_1" value="{{ phase.scoring.placePoints['1'] if phase and phase.scoring and phase.scoring.placePoints and '1' in phase.scoring.placePoints else 10 }}">
+                        <label for="points_victoire">Points pour une victoire</label>
+                        <input type="number" id="points_victoire" name="points_victoire" min="0" value="{{ phase.scoring.match.victoire if phase and phase.scoring and phase.scoring.match and phase.scoring.match.victoire is defined else 3 }}">
+                    </div>
+                    
+                    <div class="form-group" id="points-nul-group">
+                        <label for="points_nul">Points pour un match nul</label>
+                        <input type="number" id="points_nul" name="points_nul" min="0" value="{{ phase.scoring.match.nul if phase and phase.scoring and phase.scoring.match and phase.scoring.match.nul is defined else 1 }}">
                     </div>
                     
                     <div class="form-group">
-                        <label for="place_2">2ème place</label>
-                        <input type="number" id="place_2" name="place_2" value="{{ phase.scoring.placePoints['2'] if phase and phase.scoring and phase.scoring.placePoints and '2' in phase.scoring.placePoints else 5 }}">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="place_3">3ème place</label>
-                        <input type="number" id="place_3" name="place_3" value="{{ phase.scoring.placePoints['3'] if phase and phase.scoring and phase.scoring.placePoints and '3' in phase.scoring.placePoints else 0 }}">
+                        <label for="points_defaite">Points pour une défaite</label>
+                        <input type="number" id="points_defaite" name="points_defaite" min="0" value="{{ phase.scoring.match.defaite if phase and phase.scoring and phase.scoring.match and phase.scoring.match.defaite is defined else 0 }}">
                     </div>
                 </div>
             </div>
             
-            <div class="form-group">
-                <label for="points_victoire">Points de victoire</label>
-                <input type="number" id="points_victoire" name="points_victoire" min="0" value="{{ phase.scoring.pointsVictoire if phase and phase.scoring and phase.scoring.pointsVictoire else 3 }}">
-            </div>
-            
-            <div class="form-group">
-                <label>Ordre de priorité pour départage</label>
-                <div class="priority-order">
-                    <div class="priority-item">
-                        <select name="priorite_1">
-                            <option value="Points de Victoire" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[0] == 'Points de Victoire' %}selected{% endif %}>Points de Victoire</option>
-                            <option value="Indice (GoalAverage)" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[0] == 'Indice (GoalAverage)' %}selected{% endif %}>Indice (GoalAverage)</option>
-                            <option value="Points mis" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[0] == 'Points mis' %}selected{% endif %}>Points mis</option>
-                            <option value="Points Pris" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[0] == 'Points Pris' %}selected{% endif %}>Points Pris</option>
-                        </select>
-                    </div>
-                    <div class="priority-item">
-                        <select name="priorite_2">
-                            <option value="Indice (GoalAverage)" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[1] == 'Indice (GoalAverage)' %}selected{% endif %}>Indice (GoalAverage)</option>
-                            <option value="Points de Victoire" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[1] == 'Points de Victoire' %}selected{% endif %}>Points de Victoire</option>
-                            <option value="Points mis" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[1] == 'Points mis' %}selected{% endif %}>Points mis</option>
-                            <option value="Points Pris" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[1] == 'Points Pris' %}selected{% endif %}>Points Pris</option>
-                        </select>
-                    </div>
-                    <div class="priority-item">
-                        <select name="priorite_3">
-                            <option value="Points mis" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[2] == 'Points mis' %}selected{% endif %}>Points mis</option>
-                            <option value="Points de Victoire" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[2] == 'Points de Victoire' %}selected{% endif %}>Points de Victoire</option>
-                            <option value="Indice (GoalAverage)" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[2] == 'Indice (GoalAverage)' %}selected{% endif %}>Indice (GoalAverage)</option>
-                            <option value="Points Pris" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[2] == 'Points Pris' %}selected{% endif %}>Points Pris</option>
-                        </select>
-                    </div>
-                    <div class="priority-item">
-                        <select name="priorite_4">
-                            <option value="Points Pris" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[3] == 'Points Pris' %}selected{% endif %}>Points Pris</option>
-                            <option value="Points de Victoire" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[3] == 'Points de Victoire' %}selected{% endif %}>Points de Victoire</option>
-                            <option value="Indice (GoalAverage)" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[3] == 'Indice (GoalAverage)' %}selected{% endif %}>Indice (GoalAverage)</option>
-                            <option value="Points mis" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[3] == 'Points mis' %}selected{% endif %}>Points mis</option>
-                        </select>
+            <!-- Ordre de priorité et bonus uniquement pour le mode match/points -->
+            <div id="match-tiebreaker-section">
+                <div class="form-group">
+                    <label>Ordre de priorité pour départage</label>
+                    <div class="priority-order">
+                        <div class="priority-item">
+                            <select name="priorite_1">
+                                <option value="Points de Victoire" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[0] == 'Points de Victoire' %}selected{% endif %}>Points de Victoire</option>
+                                <option value="Indice (GoalAverage)" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[0] == 'Indice (GoalAverage)' %}selected{% endif %}>Indice (GoalAverage)</option>
+                                <option value="Points mis" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[0] == 'Points mis' %}selected{% endif %}>Points mis</option>
+                                <option value="Points Pris" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[0] == 'Points Pris' %}selected{% endif %}>Points Pris</option>
+                            </select>
+                        </div>
+                        <div class="priority-item">
+                            <select name="priorite_2">
+                                <option value="Indice (GoalAverage)" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[1] == 'Indice (GoalAverage)' %}selected{% endif %}>Indice (GoalAverage)</option>
+                                <option value="Points de Victoire" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[1] == 'Points de Victoire' %}selected{% endif %}>Points de Victoire</option>
+                                <option value="Points mis" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[1] == 'Points mis' %}selected{% endif %}>Points mis</option>
+                                <option value="Points Pris" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[1] == 'Points Pris' %}selected{% endif %}>Points Pris</option>
+                            </select>
+                        </div>
+                        <div class="priority-item">
+                            <select name="priorite_3">
+                                <option value="Points mis" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[2] == 'Points mis' %}selected{% endif %}>Points mis</option>
+                                <option value="Points de Victoire" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[2] == 'Points de Victoire' %}selected{% endif %}>Points de Victoire</option>
+                                <option value="Indice (GoalAverage)" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[2] == 'Indice (GoalAverage)' %}selected{% endif %}>Indice (GoalAverage)</option>
+                                <option value="Points Pris" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[2] == 'Points Pris' %}selected{% endif %}>Points Pris</option>
+                            </select>
+                        </div>
+                        <div class="priority-item">
+                            <select name="priorite_4">
+                                <option value="Points Pris" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[3] == 'Points Pris' %}selected{% endif %}>Points Pris</option>
+                                <option value="Points de Victoire" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[3] == 'Points de Victoire' %}selected{% endif %}>Points de Victoire</option>
+                                <option value="Indice (GoalAverage)" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[3] == 'Indice (GoalAverage)' %}selected{% endif %}>Indice (GoalAverage)</option>
+                                <option value="Points mis" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[3] == 'Points mis' %}selected{% endif %}>Points mis</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
-            </div>
-            
-            <div class="form-group">
-                <label>Points bonus (optionnel)</label>
+                
+                <div class="form-group">
+                    <label>Points bonus (optionnel)</label>
                 <div id="bonus-points-container">
                     {% if phase and phase.scoring and phase.scoring.bonusPoints %}
                         {% for bonus in phase.scoring.bonusPoints %}
@@ -207,6 +303,7 @@
                 </div>
                 <button type="button" class="btn btn-sm" onclick="addBonus()">Ajouter un bonus</button>
             </div>
+            </div>
         </div>
         
         <div class="form-actions">
@@ -217,6 +314,282 @@
 </div>
 
 <script>
+// Gestion de l'affichage du champ match nul
+function toggleMatchNul() {
+    const checkbox = document.getElementById('match_nul_possible');
+    const pointsNulGroup = document.getElementById('points-nul-group');
+    const pointsNulInput = document.getElementById('points_nul');
+    const matchGrid = document.getElementById('match-points-grid');
+    
+    if (checkbox && pointsNulGroup && matchGrid) {
+        if (checkbox.checked) {
+            // Afficher le champ nul (3 colonnes)
+            pointsNulGroup.style.display = 'block';
+            matchGrid.style.gridTemplateColumns = 'repeat(3, 1fr)';
+            pointsNulInput.disabled = false;
+        } else {
+            // Masquer le champ nul (2 colonnes)
+            pointsNulGroup.style.display = 'none';
+            matchGrid.style.gridTemplateColumns = 'repeat(2, 1fr)';
+            pointsNulInput.disabled = true;
+            pointsNulInput.value = 0; // Mettre à 0 si match nul impossible
+        }
+    }
+}
+
+// Gérer la visibilité des sections de scoring selon le type
+function updateScoringVisibility() {
+    const typeSelect = document.getElementById('type_id');
+    const selectedTypeId = typeSelect ? typeSelect.value : null;
+    
+    const scoringClassement = document.getElementById('scoring-classement');
+    const scoringMatch = document.getElementById('scoring-match');
+    const matchTiebreakerSection = document.getElementById('match-tiebreaker-section');
+    
+    if (selectedTypeId && typesConfig[selectedTypeId]) {
+        const config = typesConfig[selectedTypeId];
+        
+        // Afficher/masquer le scoring par classement
+        if (scoringClassement) {
+            scoringClassement.style.display = config.classement ? 'block' : 'none';
+        }
+        
+        // Afficher/masquer le scoring par match
+        if (scoringMatch) {
+            scoringMatch.style.display = config.points ? 'block' : 'none';
+        }
+        
+        // Afficher/masquer la section départage (ordre de priorité et bonus)
+        if (matchTiebreakerSection) {
+            matchTiebreakerSection.style.display = config.points ? 'block' : 'none';
+        }
+    }
+}
+
+// Initialiser l'état au chargement
+document.addEventListener('DOMContentLoaded', function() {
+    toggleMatchNul();
+    updateScoringVisibility();
+    
+    // Écouter les changements de type
+    const typeSelect = document.getElementById('type_id');
+    if (typeSelect) {
+        typeSelect.addEventListener('change', updateScoringVisibility);
+    }
+});
+
+// Gestion des plages de places
+function addRange() {
+    const container = document.getElementById('place-ranges-container');
+    const rows = container.querySelectorAll('.place-range-row');
+    const newIndex = rows.length;
+    
+    const newRow = document.createElement('div');
+    newRow.className = 'place-range-row';
+    newRow.setAttribute('data-index', newIndex);
+    newRow.innerHTML = `
+        <div class="form-group">
+            <label>De la place</label>
+            <input type="number" name="range_from[]" min="1" value="${newIndex + 1}" class="range-from" required>
+        </div>
+        <div class="form-group">
+            <label>À la place</label>
+            <input type="number" name="range_to[]" min="1" value="${newIndex + 1}" class="range-to" required>
+        </div>
+        <div class="form-group">
+            <label>Points</label>
+            <input type="number" name="range_points[]" value="0" class="range-points" required>
+        </div>
+        <button type="button" class="btn-remove-range" onclick="removeRange(this)">🗑️</button>
+    `;
+    container.appendChild(newRow);
+}
+
+function removeRange(button) {
+    const row = button.closest('.place-range-row');
+    const container = document.getElementById('place-ranges-container');
+    
+    // Garder au moins une ligne
+    if (container.querySelectorAll('.place-range-row').length > 1) {
+        row.remove();
+    } else {
+        alert('Vous devez garder au moins une plage de places.');
+    }
+}
+
+// Export des plages en JSON
+function exportRangesJSON() {
+    const ranges = getRangesFromForm();
+    const lastPlaceZero = document.querySelector('input[name="last_place_zero"]').checked;
+    
+    const config = {
+        placeRanges: ranges,
+        lastPlaceZero: lastPlaceZero,
+        exportedAt: new Date().toISOString(),
+        version: "1.0"
+    };
+    
+    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `place-ranges-config-${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// Import des plages depuis JSON
+function importRangesJSON(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const config = JSON.parse(e.target.result);
+            
+            // Validation basique
+            if (!config.placeRanges || !Array.isArray(config.placeRanges)) {
+                alert('Fichier JSON invalide : placeRanges manquant ou incorrect');
+                return;
+            }
+            
+            // Validation des plages
+            for (let range of config.placeRanges) {
+                if (!range.from || !range.to || range.points === undefined) {
+                    alert('Fichier JSON invalide : chaque plage doit avoir from, to et points');
+                    return;
+                }
+                if (range.from > range.to) {
+                    alert(`Plage invalide : from (${range.from}) > to (${range.to})`);
+                    return;
+                }
+            }
+            
+            // Charger les données
+            loadRangesIntoForm(config.placeRanges);
+            
+            // Charger lastPlaceZero si présent
+            if (config.lastPlaceZero !== undefined) {
+                document.querySelector('input[name="last_place_zero"]').checked = config.lastPlaceZero;
+            }
+            
+            alert('Configuration importée avec succès !');
+        } catch (error) {
+            alert('Erreur lors de la lecture du fichier JSON : ' + error.message);
+        }
+    };
+    reader.readAsText(file);
+    
+    // Reset input pour permettre de réimporter le même fichier
+    event.target.value = '';
+}
+
+// Récupérer les plages depuis le formulaire
+function getRangesFromForm() {
+    const container = document.getElementById('place-ranges-container');
+    const rows = container.querySelectorAll('.place-range-row');
+    const ranges = [];
+    
+    rows.forEach(row => {
+        const from = parseInt(row.querySelector('.range-from').value);
+        const to = parseInt(row.querySelector('.range-to').value);
+        const points = parseInt(row.querySelector('.range-points').value);
+        
+        if (from && to && points !== undefined) {
+            ranges.push({ from, to, points });
+        }
+    });
+    
+    return ranges;
+}
+
+// Charger des plages dans le formulaire
+function loadRangesIntoForm(ranges) {
+    const container = document.getElementById('place-ranges-container');
+    
+    // Vider le conteneur
+    container.innerHTML = '';
+    
+    // Ajouter chaque plage
+    ranges.forEach((range, index) => {
+        const newRow = document.createElement('div');
+        newRow.className = 'place-range-row';
+        newRow.setAttribute('data-index', index);
+        newRow.innerHTML = `
+            <div class="form-group">
+                <label>De la place</label>
+                <input type="number" name="range_from[]" min="1" value="${range.from}" class="range-from" required>
+            </div>
+            <div class="form-group">
+                <label>À la place</label>
+                <input type="number" name="range_to[]" min="1" value="${range.to}" class="range-to" required>
+            </div>
+            <div class="form-group">
+                <label>Points</label>
+                <input type="number" name="range_points[]" value="${range.points}" class="range-points" required>
+            </div>
+            <button type="button" class="btn-remove-range" onclick="removeRange(this)">🗑️</button>
+        `;
+        container.appendChild(newRow);
+    });
+}
+
+// Templates prédéfinis
+function loadTemplate(templateName) {
+    if (!templateName) return;
+    
+    const templates = {
+        podium: {
+            placeRanges: [
+                { from: 1, to: 1, points: 25 },
+                { from: 2, to: 2, points: 18 },
+                { from: 3, to: 3, points: 15 }
+            ],
+            lastPlaceZero: false
+        },
+        top10: {
+            placeRanges: [
+                { from: 1, to: 1, points: 25 },
+                { from: 2, to: 2, points: 18 },
+                { from: 3, to: 3, points: 15 },
+                { from: 4, to: 4, points: 12 },
+                { from: 5, to: 5, points: 10 },
+                { from: 6, to: 6, points: 8 },
+                { from: 7, to: 7, points: 6 },
+                { from: 8, to: 8, points: 4 },
+                { from: 9, to: 9, points: 2 },
+                { from: 10, to: 10, points: 1 },
+                { from: 11, to: 999, points: 0 }
+            ],
+            lastPlaceZero: true
+        },
+        marathon: {
+            placeRanges: [
+                { from: 1, to: 1, points: 100 },
+                { from: 2, to: 2, points: 80 },
+                { from: 3, to: 3, points: 60 },
+                { from: 4, to: 5, points: 50 },
+                { from: 6, to: 10, points: 40 },
+                { from: 11, to: 15, points: 30 },
+                { from: 16, to: 20, points: 20 },
+                { from: 21, to: 999, points: 10 }
+            ],
+            lastPlaceZero: false
+        }
+    };
+    
+    const template = templates[templateName];
+    if (template) {
+        loadRangesIntoForm(template.placeRanges);
+        document.querySelector('input[name="last_place_zero"]').checked = template.lastPlaceZero;
+        document.getElementById('template-select').value = '';
+    }
+}
+
+// Gestion des bonus
 function addBonus() {
     const container = document.getElementById('bonus-points-container');
     const newRow = document.createElement('div');
@@ -249,6 +622,58 @@ function removeBonus(button) {
         box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         max-width: 900px;
         margin: 0 auto;
+    }
+    
+    /* Styles pour les plages de places */
+    .place-ranges-container {
+        margin-bottom: 15px;
+    }
+    .place-range-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr auto;
+        gap: 10px;
+        align-items: end;
+        margin-bottom: 10px;
+        padding: 10px;
+        background: #f5f5f5;
+        border-radius: 4px;
+    }
+    .place-range-row .form-group {
+        margin-bottom: 0;
+    }
+    .place-range-row .form-group label {
+        display: block;
+        font-size: 0.85em;
+        margin-bottom: 5px;
+        color: #666;
+    }
+    .place-range-row input {
+        width: 100%;
+    }
+    .btn-remove-range {
+        background: #dc3545;
+        color: white;
+        border: none;
+        padding: 8px 12px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        height: 38px;
+    }
+    .btn-remove-range:hover {
+        background: #c82333;
+    }
+    .btn-info {
+        background: #17a2b8;
+        color: white;
+        border: none;
+        padding: 8px 12px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+    }
+    .btn-info:hover {
+        background: #138496;
     }
     .form-section {
         margin-bottom: 30px;
@@ -346,4 +771,6 @@ function removeBonus(button) {
         font-size: 12px;
     }
 </style>
+
+<script src="{{ url_for('static', filename='js/phase-form.js') }}"></script>
 {% endblock %} 

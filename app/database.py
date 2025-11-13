@@ -115,6 +115,21 @@ def check_and_update_schema():
                 except SQLAlchemyError as e:
                     print(f"Erreur lors de la modification des colonnes: {e}")
                     connection.rollback()
+            
+            # Ajouter les colonnes type_general, ordre et description à la table phases
+            for col_name, col_type in [('type_general', 'VARCHAR(50)'), ('ordre', 'INT'), ('description', 'VARCHAR(1000)')]:
+                result = connection.execute(text(f"SHOW COLUMNS FROM phases LIKE '{col_name}'"))
+                column_exists = result.fetchone() is not None
+                
+                if not column_exists:
+                    print(f"Migration: Ajout de la colonne {col_name} à la table phases")
+                    try:
+                        connection.execute(text(f"ALTER TABLE phases ADD COLUMN {col_name} {col_type}"))
+                        connection.commit()
+                        print(f"Colonne {col_name} ajoutée à la table phases")
+                    except SQLAlchemyError as e:
+                        print(f"Erreur lors de l'ajout de la colonne {col_name}: {e}")
+                        connection.rollback()
                 
         except SQLAlchemyError as e:
             print(f"Erreur lors de la vérification/mise à jour du schéma: {e}")

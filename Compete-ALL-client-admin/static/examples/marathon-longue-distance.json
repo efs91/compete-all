@@ -1,0 +1,48 @@
+{
+  "placeRanges": [
+    {
+      "from": 1,
+      "to": 1,
+      "points": 100
+    },
+    {
+      "from": 2,
+      "to": 2,
+      "points": 80
+    },
+    {
+      "from": 3,
+      "to": 3,
+      "points": 60
+    },
+    {
+      "from": 4,
+      "to": 5,
+      "points": 50
+    },
+    {
+      "from": 6,
+      "to": 10,
+      "points": 40
+    },
+    {
+      "from": 11,
+      "to": 15,
+      "points": 30
+    },
+    {
+      "from": 16,
+      "to": 20,
+      "points": 20
+    },
+    {
+      "from": 21,
+      "to": 999,
+      "points": 10
+    }
+  ],
+  "lastPlaceZero": false,
+  "exportedAt": "2025-11-12T00:00:00.000Z",
+  "version": "1.0",
+  "description": "Configuration pour course longue type marathon avec plages de places"
+}

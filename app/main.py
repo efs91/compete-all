@@ -46,11 +46,13 @@ from .routers import (
     regles,
     classements,
     formats,
-    types
+    types,
+    poules
 )
 
 app.include_router(evenements.router, prefix="/evenements", tags=["evenements"])
 app.include_router(phases.router, tags=["phases"])
+app.include_router(poules.router, tags=["poules"])
 app.include_router(rencontres.router, tags=["rencontres"])
 app.include_router(joueurs.router, prefix="/joueurs", tags=["joueurs"])
 app.include_router(equipes.router, prefix="/equipes", tags=["equipes"])

@@ -12,6 +12,24 @@ equipe_joueur = Table(
     Column('joueur_id', String(36), ForeignKey('joueurs.id'))
 )
 
+# Table pour les inscriptions globales à un événement
+evenement_joueur = Table(
+    'evenement_joueur',
+    Base.metadata,
+    Column('evenement_id', String(36), ForeignKey('evenements.id', ondelete='CASCADE')),
+    Column('joueur_id', String(36), ForeignKey('joueurs.id')),
+    Column('date_inscription', DateTime, default=datetime.utcnow)
+)
+
+# Table pour associer les joueurs aux poules
+poule_joueur = Table(
+    'poule_joueur',
+    Base.metadata,
+    Column('poule_id', String(36), ForeignKey('poules.id', ondelete='CASCADE')),
+    Column('joueur_id', String(36), ForeignKey('joueurs.id')),
+    Column('ordre', Integer, nullable=True)  # Ordre/seed dans la poule
+)
+
 # Suppression de la table phase_joueur qui sera remplacée par phase_evenement_joueur
 # phase_joueur = Table(
 #     'phase_joueur', 
@@ -30,7 +48,9 @@ phase_evenement_joueur = Table(
     Column('evenement_id', String(36), ForeignKey('evenements.id')),
     Column('joueur_id', String(36), ForeignKey('joueurs.id')),
     Column('ordre_inscription', Integer, nullable=False),
-    Column('seed', Integer, nullable=True)
+    Column('seed', Integer, nullable=True),
+    Column('statut', String(50), nullable=False, default='inscrit'),  # inscrit, qualifie, elimine, repechage
+    Column('phase_origine_id', String(36), nullable=True)  # ID de la phase d'où vient la qualification (NULL si première phase)
 )
 
 # Table de liaison entre phases et événements
@@ -38,7 +58,9 @@ phase_evenement = Table(
     'phase_evenement',
     Base.metadata,
     Column('phase_id', String(36), ForeignKey('phases.id')),
-    Column('evenement_id', String(36), ForeignKey('evenements.id'))
+    Column('evenement_id', String(36), ForeignKey('evenements.id')),
+    Column('ordre', Integer, nullable=False, default=0),
+    Column('config_qualification', JSON, nullable=True)  # Configuration de qualification vers phase suivante
 )
 
 class Format(Base):
@@ -81,18 +103,21 @@ class Joueur(Base):
 
     equipes = relationship("Equipe", secondary=equipe_joueur, back_populates="joueurs")
     # Modification de la relation pour utiliser la nouvelle table de liaison
-    phases = relationship("Phase", secondary=phase_evenement_joueur, back_populates="joueurs")
-    evenements = relationship("Evenement", secondary=phase_evenement_joueur, back_populates="joueurs")
+    phases = relationship("Phase", secondary=phase_evenement_joueur, back_populates="joueurs", overlaps="evenements,joueurs")
+    evenements = relationship("Evenement", secondary=phase_evenement_joueur, back_populates="joueurs", overlaps="phases,joueurs")
 
 class Phase(Base):
     __tablename__ = "phases"
     
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     nom = Column(String(255), nullable=False)
+    type_general = Column(String(50), nullable=True)  # Type général: poule, elimination, etc.
     format_id = Column(String(36), ForeignKey("formats.id"), nullable=False)
     type_id = Column(String(36), ForeignKey("types.id"), nullable=False)
+    ordre = Column(Integer, nullable=True)  # Ordre d'exécution de la phase
+    description = Column(String(1000), nullable=True)  # Description de la phase
     scoring = Column(JSON, nullable=True)
-    configuration = Column(JSON, nullable=False)
+    configuration = Column(JSON, nullable=True)
     # Suppression de evenement_id car une phase peut être dans plusieurs événements
     # evenement_id = Column(String(36), ForeignKey("evenements.id"))
     
@@ -102,9 +127,10 @@ class Phase(Base):
     format = relationship("Format", back_populates="phases")
     type = relationship("Type", back_populates="phases")
     # Utilisation de la nouvelle table de liaison
-    joueurs = relationship("Joueur", secondary=phase_evenement_joueur, back_populates="phases")
+    joueurs = relationship("Joueur", secondary=phase_evenement_joueur, back_populates="phases", overlaps="evenements,joueurs")
     rencontres = relationship("Rencontre", back_populates="phase")
     classements = relationship("Classement", back_populates="phase")
+    poules = relationship("Poule", back_populates="phase")
 
 class Equipe(Base):
     __tablename__ = "equipes"
@@ -127,7 +153,7 @@ class Evenement(Base):
     
     # Mise à jour des relations
     phases = relationship("Phase", secondary=phase_evenement, back_populates="evenements")
-    joueurs = relationship("Joueur", secondary=phase_evenement_joueur, back_populates="evenements")
+    joueurs = relationship("Joueur", secondary=phase_evenement_joueur, back_populates="evenements", overlaps="phases,joueurs")
     equipes = relationship("Equipe", back_populates="evenement")
     classements = relationship("Classement", back_populates="evenement")
 
@@ -138,9 +164,11 @@ class Rencontre(Base):
     phase_id = Column(String(36), ForeignKey("phases.id"), nullable=False)
     evenement_id = Column(String(36), ForeignKey("evenements.id"), nullable=False)  # Ajout de l'événement
     participants = Column(JSON, nullable=True)  # Liste des IDs des participants ["joueur_id1", "joueur_id2", ...]
+    poule_id = Column(String(36), ForeignKey("poules.id"), nullable=True)  # ID de la poule (si applicable)
     
     phase = relationship("Phase", back_populates="rencontres")
     evenement = relationship("Evenement")  # Ajout de la relation avec l'événement
+    poule = relationship("Poule", backref="rencontres")  # Relation avec la poule
     resultats = relationship("Resultat", back_populates="rencontre")
     classements = relationship("Classement", back_populates="rencontre")
 
@@ -166,6 +194,19 @@ class Regle(Base):
     valeurs = Column(JSON, nullable=False)
     
     classement = relationship("Classement", back_populates="regle")
+
+class Poule(Base):
+    __tablename__ = "poules"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    phase_id = Column(String(36), ForeignKey("phases.id"), nullable=False)
+    evenement_id = Column(String(36), ForeignKey("evenements.id"), nullable=False)
+    nom = Column(String(100), nullable=False)  # Ex: "Poule A", "Poule 1"
+    ordre = Column(Integer, nullable=False, default=1)  # Pour trier les poules
+    
+    phase = relationship("Phase", back_populates="poules")
+    evenement = relationship("Evenement")
+    joueurs = relationship("Joueur", secondary=poule_joueur, backref="poules")
 
 class Classement(Base):
     __tablename__ = "classements"

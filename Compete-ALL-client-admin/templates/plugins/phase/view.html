@@ -21,7 +21,7 @@
             </tr>
             <tr>
                 <th>Type</th>
-                <td>{{ phase.type }}</td>
+                <td>{{ phase.type_general if phase.type_general else '-' }}</td>
             </tr>
             <tr>
                 <th>Type détaillé</th>
@@ -86,6 +86,10 @@
                 <th>Joueurs idéal par poule</th>
                 <td>{{ phase.configuration.ideal_joueurs_poule }}</td>
             </tr>
+            <tr>
+                <th>Match nul possible</th>
+                <td>{{ 'Oui' if phase.configuration.match_nul_possible else 'Non' }}</td>
+            </tr>
         </table>
         {% else %}
         <p class="no-data">Aucune configuration définie.</p>
@@ -95,31 +99,72 @@
     <div class="phase-scoring">
         <h2>Scoring</h2>
         {% if phase.scoring %}
+        
+        <!-- Scoring par Classement (si configuré) -->
+        {% if type_info and type_info.resultats_config and type_info.resultats_config['classement'] %}
         <div class="scoring-section">
-            <h3>Points par place</h3>
+            <h3>📊 Scoring par Classement</h3>
+            {% if phase.scoring.classement and phase.scoring.classement.placeRanges %}
+            <table class="compact-table">
+                <thead>
+                    <tr>
+                        <th>De la place</th>
+                        <th>À la place</th>
+                        <th>Points</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for range in phase.scoring.classement.placeRanges %}
+                    <tr>
+                        <td>{{ range.from }}</td>
+                        <td>{{ range.to }}</td>
+                        <td>{{ range.points }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% if phase.scoring.classement.lastPlaceZero %}
+            <p style="color: #666; font-size: 0.9em; margin-top: 10px;">
+                ⚠️ La dernière place reçoit toujours 0 points
+            </p>
+            {% endif %}
+            {% else %}
+            <p>Aucune plage de places définie.</p>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Scoring par Match (si configuré) -->
+        {% if type_info and type_info.resultats_config and type_info.resultats_config['points'] %}
+        <div class="scoring-section">
+            <h3>⚔️ Scoring par Match</h3>
+            {% if phase.scoring.match %}
             <table class="compact-table">
                 <tr>
-                    <th>1ère place</th>
-                    <td>{{ phase.scoring.placePoints['1'] if phase.scoring.placePoints and '1' in phase.scoring.placePoints else '-' }}</td>
+                    <th>Victoire</th>
+                    <td>{{ phase.scoring.match.victoire }} points</td>
                 </tr>
+                {% if phase.configuration and phase.configuration.match_nul_possible %}
                 <tr>
-                    <th>2ème place</th>
-                    <td>{{ phase.scoring.placePoints['2'] if phase.scoring.placePoints and '2' in phase.scoring.placePoints else '-' }}</td>
+                    <th>Match nul</th>
+                    <td>{{ phase.scoring.match.nul if phase.scoring.match.nul is defined else 0 }} points</td>
                 </tr>
+                {% endif %}
                 <tr>
-                    <th>3ème place</th>
-                    <td>{{ phase.scoring.placePoints['3'] if phase.scoring.placePoints and '3' in phase.scoring.placePoints else '-' }}</td>
+                    <th>Défaite</th>
+                    <td>{{ phase.scoring.match.defaite if phase.scoring.match.defaite is defined else 0 }} points</td>
                 </tr>
             </table>
+            {% else %}
+            <p>Aucun scoring de match défini.</p>
+            {% endif %}
         </div>
+        {% endif %}
 
+        <!-- Ordre de priorité uniquement pour le mode match/points -->
+        {% if type_info and type_info.resultats_config and type_info.resultats_config['points'] %}
         <div class="scoring-section">
-            <h3>Points de victoire</h3>
-            <p>{{ phase.scoring.pointsVictoire }}</p>
-        </div>
-
-        <div class="scoring-section">
-            <h3>Ordre de priorité</h3>
+            <h3>Ordre de priorité pour départage</h3>
             {% if phase.scoring.ordrePriorite %}
             <ol>
                 {% for critere in phase.scoring.ordrePriorite %}
@@ -130,9 +175,12 @@
             <p>Aucun ordre de priorité défini.</p>
             {% endif %}
         </div>
+        {% endif %}
 
+        <!-- Points bonus uniquement pour le mode match/points -->
+        {% if type_info and type_info.resultats_config and type_info.resultats_config['points'] %}
         <div class="scoring-section">
-            <h3>Points bonus</h3>
+            <h3>Points bonus (optionnel)</h3>
             {% if phase.scoring.bonusPoints and phase.scoring.bonusPoints|length > 0 %}
             <table>
                 <thead>
@@ -154,6 +202,7 @@
             <p>Aucun point bonus défini.</p>
             {% endif %}
         </div>
+        {% endif %}
         {% else %}
         <p class="no-data">Aucun système de scoring défini.</p>
         {% endif %}
@@ -223,6 +272,13 @@
         color: #2c3e50;
         border-bottom: 1px solid #eee;
         padding-bottom: 5px;
+    }
+    .scoring-section .compact-table thead th {
+        background-color: #f5f5f5;
+        font-weight: 600;
+    }
+    .scoring-section .compact-table tbody tr:hover {
+        background-color: #fafafa;
     }
     .no-data {
         color: #777;

@@ -3,6 +3,7 @@ import requests
 import os
 import json
 from pathlib import Path
+from scoring_utils import process_scoring_data
 
 app = Flask(__name__)
 app.secret_key = "compete-all-secret-key"  # Utilisé pour les messages flash
@@ -527,7 +528,7 @@ def add_phase():
         phase_data = {
             "nom": request.form.get('nom'),
             "description": request.form.get('description'),
-            "type": request.form.get('type'),
+            "type_general": request.form.get('type'),
             "type_id": request.form.get('type_id'),
             "format_id": request.form.get('format_id'),
             "ordre": int(request.form.get('ordre') or 1)
@@ -543,44 +544,30 @@ def add_phase():
             "temps_par_manche": int(request.form.get('temps_par_manche') or 3),
             "max_joueurs_poule": int(request.form.get('max_joueurs_poule') or 6),
             "min_joueurs_poule": int(request.form.get('min_joueurs_poule') or 3),
-            "ideal_joueurs_poule": int(request.form.get('ideal_joueurs_poule') or 5)
+            "ideal_joueurs_poule": int(request.form.get('ideal_joueurs_poule') or 5),
+            "match_nul_possible": 'match_nul_possible' in request.form
         }
         phase_data["configuration"] = configuration
         
-        # Construire l'objet de scoring
-        place_points = {
-            "1": int(request.form.get('place_1') or 10),
-            "2": int(request.form.get('place_2') or 5),
-            "3": int(request.form.get('place_3') or 0)
-        }
-        
-        ordre_priorite = [
-            request.form.get('priorite_1', 'Points de Victoire'),
-            request.form.get('priorite_2', 'Indice (GoalAverage)'),
-            request.form.get('priorite_3', 'Points mis'),
-            request.form.get('priorite_4', 'Points Pris')
-        ]
-        
-        # Traiter les points bonus (qui peuvent être multiples)
-        bonus_points = []
-        if 'bonus_condition[]' in request.form:
-            bonus_conditions = request.form.getlist('bonus_condition[]')
-            bonus_points_values = request.form.getlist('bonus_points[]')
-            
-            for i in range(len(bonus_conditions)):
-                if bonus_conditions[i] and bonus_points_values[i]:
-                    bonus_points.append({
-                        "condition": bonus_conditions[i],
-                        "points": int(bonus_points_values[i])
-                    })
-        
-        scoring = {
-            "placePoints": place_points,
-            "pointsVictoire": int(request.form.get('points_victoire') or 3),
-            "ordrePriorite": ordre_priorite,
-            "bonusPoints": bonus_points
-        }
-        phase_data["scoring"] = scoring
+        # Construire l'objet de scoring avec le nouveau système de plages
+        try:
+            scoring = process_scoring_data(request.form)
+            phase_data["scoring"] = scoring
+        except ValueError as e:
+            flash(f"Erreur dans la configuration du scoring: {str(e)}", "error")
+            # Recharger les types et formats pour réafficher le formulaire
+            types = []
+            formats = []
+            try:
+                types_response = requests.get(f"{API_BASE_URL}/types/")
+                if types_response.status_code == 200:
+                    types = types_response.json()
+                formats_response = requests.get(f"{API_BASE_URL}/formats/")
+                if formats_response.status_code == 200:
+                    formats = formats_response.json()
+            except:
+                pass
+            return render_template('plugins/phase/new.html', phase=phase_data, types=types, formats=formats)
         
         # Envoyer les données à l'API
         try:
@@ -659,7 +646,7 @@ def edit_phase(phase_id):
         phase_data = {
             "nom": request.form.get('nom'),
             "description": request.form.get('description'),
-            "type": request.form.get('type'),
+            "type_general": request.form.get('type'),
             "type_id": request.form.get('type_id'),
             "format_id": request.form.get('format_id'),
             "ordre": int(request.form.get('ordre') or 1)
@@ -675,44 +662,31 @@ def edit_phase(phase_id):
             "temps_par_manche": int(request.form.get('temps_par_manche') or 3),
             "max_joueurs_poule": int(request.form.get('max_joueurs_poule') or 6),
             "min_joueurs_poule": int(request.form.get('min_joueurs_poule') or 3),
-            "ideal_joueurs_poule": int(request.form.get('ideal_joueurs_poule') or 5)
+            "ideal_joueurs_poule": int(request.form.get('ideal_joueurs_poule') or 5),
+            "match_nul_possible": 'match_nul_possible' in request.form
         }
         phase_data["configuration"] = configuration
         
-        # Construire l'objet de scoring
-        place_points = {
-            "1": int(request.form.get('place_1') or 10),
-            "2": int(request.form.get('place_2') or 5),
-            "3": int(request.form.get('place_3') or 0)
-        }
-        
-        ordre_priorite = [
-            request.form.get('priorite_1', 'Points de Victoire'),
-            request.form.get('priorite_2', 'Indice (GoalAverage)'),
-            request.form.get('priorite_3', 'Points mis'),
-            request.form.get('priorite_4', 'Points Pris')
-        ]
-        
-        # Traiter les points bonus (qui peuvent être multiples)
-        bonus_points = []
-        if 'bonus_condition[]' in request.form:
-            bonus_conditions = request.form.getlist('bonus_condition[]')
-            bonus_points_values = request.form.getlist('bonus_points[]')
-            
-            for i in range(len(bonus_conditions)):
-                if bonus_conditions[i] and bonus_points_values[i]:
-                    bonus_points.append({
-                        "condition": bonus_conditions[i],
-                        "points": int(bonus_points_values[i])
-                    })
-        
-        scoring = {
-            "placePoints": place_points,
-            "pointsVictoire": int(request.form.get('points_victoire') or 3),
-            "ordrePriorite": ordre_priorite,
-            "bonusPoints": bonus_points
-        }
-        phase_data["scoring"] = scoring
+        # Construire l'objet de scoring avec le nouveau système de plages
+        try:
+            scoring = process_scoring_data(request.form)
+            phase_data["scoring"] = scoring
+        except ValueError as e:
+            flash(f"Erreur dans la configuration du scoring: {str(e)}", "error")
+            # Recharger les types et formats pour réafficher le formulaire
+            types = []
+            formats = []
+            try:
+                types_response = requests.get(f"{API_BASE_URL}/types/")
+                if types_response.status_code == 200:
+                    types = types_response.json()
+                formats_response = requests.get(f"{API_BASE_URL}/formats/")
+                if formats_response.status_code == 200:
+                    formats = formats_response.json()
+            except:
+                pass
+            phase_data['id'] = phase_id
+            return render_template('plugins/phase/edit.html', phase=phase_data, phase_id=phase_id, types=types, formats=formats)
         
         # Envoyer les données à l'API
         try:

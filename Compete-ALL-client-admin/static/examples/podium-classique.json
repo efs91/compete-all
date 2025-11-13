@@ -1,0 +1,23 @@
+{
+  "placeRanges": [
+    {
+      "from": 1,
+      "to": 1,
+      "points": 25
+    },
+    {
+      "from": 2,
+      "to": 2,
+      "points": 18
+    },
+    {
+      "from": 3,
+      "to": 3,
+      "points": 15
+    }
+  ],
+  "lastPlaceZero": false,
+  "exportedAt": "2025-11-12T00:00:00.000Z",
+  "version": "1.0",
+  "description": "Configuration simple pour un podium classique (Or, Argent, Bronze)"
+}

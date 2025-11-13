@@ -78,8 +78,11 @@ class JoueurSimple(JoueurBase):
 class PhaseSimple(BaseModel):
     id: str
     nom: str
+    type_general: Optional[str] = None
     format_id: str
     type_id: str
+    ordre: Optional[int] = None
+    description: Optional[str] = None
     scoring: Optional[Dict[str, Any]] = None
     configuration: Optional[Dict[str, Any]] = None
     class Config:
@@ -111,10 +114,13 @@ class PhaseEvenementJoueurDetail(PhaseEvenementJoueurBase):
 
 class PhaseBase(BaseModel):
     nom: str
+    type_general: Optional[str] = None
     format_id: str
     type_id: str
+    ordre: Optional[int] = None
+    description: Optional[str] = None
     scoring: Optional[Dict[str, Any]] = None
-    configuration: Dict[str, Any]
+    configuration: Optional[Dict[str, Any]] = None
 
 class PhaseCreate(PhaseBase):
     pass
@@ -130,6 +136,7 @@ class PhaseEventRelation(BaseModel):
     phase_id: str
     evenement_id: str
     joueurs: Optional[List[PhaseEvenementJoueurCreate]] = None
+    config_qualification: Optional[dict] = None  # Configuration de qualification
 
 class PhaseInEvent(PhaseBase):
     id: str

@@ -73,6 +73,26 @@ def read_phase_template(phase_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Phase non trouvée")
     return db_phase
 
+@router.get("/phases/{phase_id}/debug-config")
+def debug_phase_config(phase_id: str, db: Session = Depends(get_db)):
+    """DEBUG - Affiche la configuration complète d'une phase"""
+    db_phase = db.query(models.Phase).filter(models.Phase.id == phase_id).first()
+    if db_phase is None:
+        raise HTTPException(status_code=404, detail="Phase non trouvée")
+    
+    config = db_phase.configuration or {}
+    
+    return {
+        "phase_id": phase_id,
+        "phase_nom": db_phase.nom,
+        "configuration": config,
+        "configuration_type": str(type(config)),
+        "joueurs_min": config.get('joueurs_min', 'NON DEFINI'),
+        "joueurs_max": config.get('joueurs_max', 'NON DEFINI'),
+        "joueurs_souhaite": config.get('joueurs_souhaite', 'NON DEFINI'),
+        "config_keys": list(config.keys()) if isinstance(config, dict) else "Not a dict"
+    }
+
 @router.put("/phases/{phase_id}", response_model=schemas.PhaseSimple)
 def update_phase_template(phase_id: str, phase: schemas.PhaseCreate, db: Session = Depends(get_db)):
     """Met à jour un template de phase"""
@@ -148,10 +168,20 @@ def add_phase_to_event(
     ).first()
     
     if not existing:
-        # Ajouter la relation phase-événement
+        # Déterminer le prochain ordre disponible
+        max_ordre = db.execute(
+            select(func.max(models.phase_evenement.c.ordre))
+            .where(models.phase_evenement.c.evenement_id == evenement_id)
+        ).scalar()
+        
+        next_ordre = (max_ordre or 0) + 1
+        
+        # Ajouter la relation phase-événement avec l'ordre et la config de qualification
         stmt = models.phase_evenement.insert().values(
             phase_id=phase_relation.phase_id,
-            evenement_id=evenement_id
+            evenement_id=evenement_id,
+            ordre=next_ordre,
+            config_qualification=phase_relation.config_qualification
         )
         db.execute(stmt)
     
@@ -188,23 +218,32 @@ def add_phase_to_event(
 
 @router.get("/evenements/{evenement_id}/phases", response_model=List[schemas.PhaseInEvent])
 def read_phases_for_event(evenement_id: str, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Liste toutes les phases d'un événement avec leurs joueurs"""
+    """Liste toutes les phases d'un événement avec leurs joueurs, triées par ordre"""
     # Vérifier si l'événement existe
     db_evenement = db.query(models.Evenement).filter(models.Evenement.id == evenement_id).first()
     if db_evenement is None:
         raise HTTPException(status_code=404, detail="Événement non trouvé")
     
-    # Récupérer les IDs des phases associées à cet événement
-    phase_ids = db.query(models.phase_evenement.c.phase_id).filter(
-        models.phase_evenement.c.evenement_id == evenement_id
+    # Récupérer les phases avec leur ordre
+    phase_ordres = db.execute(
+        select(models.phase_evenement.c.phase_id, models.phase_evenement.c.ordre)
+        .where(models.phase_evenement.c.evenement_id == evenement_id)
+        .order_by(models.phase_evenement.c.ordre)
     ).all()
     
-    phase_ids = [p[0] for p in phase_ids]
+    phase_ids = [p[0] for p in phase_ordres]
     
-    # Récupérer les phases
-    phases = db.query(models.Phase).filter(models.Phase.id.in_(phase_ids)).offset(skip).limit(limit).all()
+    if not phase_ids:
+        return []
     
-    return [format_phase_response(phase, evenement_id, db) for phase in phases]
+    # Récupérer les phases dans l'ordre
+    phases = db.query(models.Phase).filter(models.Phase.id.in_(phase_ids)).all()
+    
+    # Créer un dictionnaire pour garder l'ordre
+    phase_dict = {phase.id: phase for phase in phases}
+    phases_ordered = [phase_dict[phase_id] for phase_id in phase_ids if phase_id in phase_dict]
+    
+    return [format_phase_response(phase, evenement_id, db) for phase in phases_ordered]
 
 @router.get("/evenements/{evenement_id}/phases/{phase_id}", response_model=schemas.PhaseInEvent)
 def read_phase_in_event(evenement_id: str, phase_id: str, db: Session = Depends(get_db)):
@@ -227,7 +266,7 @@ def read_phase_in_event(evenement_id: str, phase_id: str, db: Session = Depends(
 
 @router.delete("/evenements/{evenement_id}/phases/{phase_id}")
 def remove_phase_from_event(evenement_id: str, phase_id: str, db: Session = Depends(get_db)):
-    """Retire une phase d'un événement"""
+    """Retire une phase d'un événement et supprime toutes les données associées (rencontres, résultats, classements)"""
     # Vérifier si la relation existe
     phase_in_event = db.query(models.phase_evenement).filter(
         models.phase_evenement.c.phase_id == phase_id,
@@ -237,7 +276,53 @@ def remove_phase_from_event(evenement_id: str, phase_id: str, db: Session = Depe
     if not phase_in_event:
         raise HTTPException(status_code=404, detail="Phase non trouvée dans cet événement")
     
-    # Supprimer les relations joueurs-phase-événement
+    # 1. Récupérer les IDs des rencontres de cette phase dans cet événement
+    rencontres = db.query(models.Rencontre).filter(
+        models.Rencontre.phase_id == phase_id,
+        models.Rencontre.evenement_id == evenement_id
+    ).all()
+    rencontre_ids = [r.id for r in rencontres]
+    
+    if rencontre_ids:
+        # 2. Supprimer les résultats liés à ces rencontres
+        db.query(models.Resultat).filter(
+            models.Resultat.rencontre_id.in_(rencontre_ids)
+        ).delete(synchronize_session=False)
+        
+        # 3. Supprimer les classements liés à ces rencontres
+        db.query(models.Classement).filter(
+            models.Classement.rencontre_id.in_(rencontre_ids)
+        ).delete(synchronize_session=False)
+        
+        # 4. Supprimer les rencontres
+        db.query(models.Rencontre).filter(
+            models.Rencontre.phase_id == phase_id,
+            models.Rencontre.evenement_id == evenement_id
+        ).delete(synchronize_session=False)
+    
+    # 5. Supprimer les classements liés à cette phase dans cet événement
+    db.query(models.Classement).filter(
+        models.Classement.phase_id == phase_id,
+        models.Classement.evenement_id == evenement_id
+    ).delete(synchronize_session=False)
+    
+    # 6. Supprimer les poules de cette phase
+    poules = db.query(models.Poule).filter(
+        models.Poule.phase_id == phase_id,
+        models.Poule.evenement_id == evenement_id
+    ).all()
+    
+    for poule in poules:
+        # Supprimer les associations joueurs-poule
+        db.execute(
+            models.poule_joueur.delete().where(
+                models.poule_joueur.c.poule_id == poule.id
+            )
+        )
+        # Supprimer la poule
+        db.delete(poule)
+    
+    # 7. Supprimer les relations joueurs-phase-événement
     db.execute(
         models.phase_evenement_joueur.delete().where(
             models.phase_evenement_joueur.c.phase_id == phase_id,
@@ -245,7 +330,7 @@ def remove_phase_from_event(evenement_id: str, phase_id: str, db: Session = Depe
         )
     )
     
-    # Supprimer la relation phase-événement
+    # 8. Supprimer la relation phase-événement
     db.execute(
         models.phase_evenement.delete().where(
             models.phase_evenement.c.phase_id == phase_id,
@@ -254,7 +339,7 @@ def remove_phase_from_event(evenement_id: str, phase_id: str, db: Session = Depe
     )
     
     db.commit()
-    return {"message": "Phase retirée de l'événement"}
+    return {"message": "Phase retirée de l'événement avec toutes ses données (poules incluses)"}
 
 # =========== ROUTES POUR LES JOUEURS DANS LES PHASES D'UN ÉVÉNEMENT ===========
 
@@ -372,3 +457,239 @@ def remove_joueur_from_phase_in_event(evenement_id: str, phase_id: str, joueur_i
     
     db.commit()
     return {"message": "Joueur retiré de la phase"}
+
+@router.put("/evenements/{evenement_id}/phases/reorder")
+def reorder_phases(evenement_id: str, phase_orders: List[Dict], db: Session = Depends(get_db)):
+    """Réorganise l'ordre des phases d'un événement
+    
+    Body attendu : [{"phase_id": "uuid", "ordre": 1}, {"phase_id": "uuid2", "ordre": 2}, ...]
+    """
+    # Vérifier que l'événement existe
+    db_evenement = db.query(models.Evenement).filter(models.Evenement.id == evenement_id).first()
+    if db_evenement is None:
+        raise HTTPException(status_code=404, detail="Événement non trouvé")
+    
+    # Mettre à jour l'ordre de chaque phase
+    for phase_order in phase_orders:
+        phase_id = phase_order.get("phase_id")
+        ordre = phase_order.get("ordre")
+        
+        if not phase_id or ordre is None:
+            raise HTTPException(status_code=400, detail="phase_id et ordre requis pour chaque élément")
+        
+        # Vérifier que la phase existe dans cet événement
+        phase_in_event = db.execute(
+            select(models.phase_evenement).where(
+                models.phase_evenement.c.phase_id == phase_id,
+                models.phase_evenement.c.evenement_id == evenement_id
+            )
+        ).first()
+        
+        if not phase_in_event:
+            raise HTTPException(status_code=404, detail=f"Phase {phase_id} non trouvée dans cet événement")
+        
+        # Mettre à jour l'ordre
+        db.execute(
+            models.phase_evenement.update().where(
+                models.phase_evenement.c.phase_id == phase_id,
+                models.phase_evenement.c.evenement_id == evenement_id
+            ).values(ordre=ordre)
+        )
+    
+    db.commit()
+    return {"message": "Ordre des phases mis à jour"}
+
+@router.post("/evenements/{evenement_id}/phases/{phase_id}/qualifier")
+def qualifier_pour_phase_suivante(evenement_id: str, phase_id: str, db: Session = Depends(get_db)):
+    """Qualifie automatiquement les joueurs pour la phase suivante selon les règles de qualification"""
+    
+    # 1. Récupérer la phase actuelle avec sa config_qualification
+    phase_actuelle = db.execute(
+        select(models.phase_evenement).where(
+            models.phase_evenement.c.phase_id == phase_id,
+            models.phase_evenement.c.evenement_id == evenement_id
+        )
+    ).first()
+    
+    if not phase_actuelle:
+        raise HTTPException(status_code=404, detail="Phase non trouvée")
+    
+    config_qualification = phase_actuelle.config_qualification
+    if not config_qualification or config_qualification.get('mode') == 'aucune':
+        raise HTTPException(status_code=400, detail="Aucune configuration de qualification pour cette phase")
+    
+    # 2. Récupérer la phase suivante (ordre + 1)
+    phase_suivante = db.execute(
+        select(models.phase_evenement).where(
+            models.phase_evenement.c.evenement_id == evenement_id,
+            models.phase_evenement.c.ordre == phase_actuelle.ordre + 1
+        )
+    ).first()
+    
+    if not phase_suivante:
+        raise HTTPException(status_code=404, detail="Aucune phase suivante configurée")
+    
+    # 3. Récupérer les informations de la phase pour le scoring
+    db_phase = db.query(models.Phase).filter(models.Phase.id == phase_id).first()
+    if not db_phase:
+        raise HTTPException(status_code=404, detail="Phase non trouvée")
+    
+    # 4. Calculer le classement selon le mode de qualification
+    mode = config_qualification.get('mode')
+    joueurs_qualifies = []
+    
+    if mode == 'tous_qualifies':
+        # Tous les joueurs passent à la phase suivante
+        joueurs_inscrits = db.execute(
+            select(models.phase_evenement_joueur).where(
+                models.phase_evenement_joueur.c.phase_id == phase_id,
+                models.phase_evenement_joueur.c.evenement_id == evenement_id
+            )
+        ).all()
+        joueurs_qualifies = [j.joueur_id for j in joueurs_inscrits]
+    
+    elif mode in ['classement_phase', 'par_poule']:
+        # Calculer le classement basé sur les résultats de cette phase
+        classement = calculer_classement_phase(phase_id, evenement_id, db_phase, db)
+        
+        # Appliquer les critères de sélection
+        nb_qualifies = config_qualification.get('nb_qualifies')
+        pourcentage_qualifies = config_qualification.get('pourcentage_qualifies')
+        
+        if nb_qualifies:
+            # Nombre fixe de qualifiés
+            joueurs_qualifies = [j['joueur_id'] for j in classement[:nb_qualifies]]
+        elif pourcentage_qualifies:
+            # Pourcentage de qualifiés
+            nb_total = len(classement)
+            nb_a_qualifier = int(nb_total * pourcentage_qualifies / 100)
+            joueurs_qualifies = [j['joueur_id'] for j in classement[:nb_a_qualifier]]
+        else:
+            raise HTTPException(status_code=400, detail="Configuration de qualification invalide")
+    
+    elif mode == 'classement_general':
+        # TODO: Implémenter le classement général cumulé sur toutes les phases précédentes
+        raise HTTPException(status_code=501, detail="Le mode 'classement_general' n'est pas encore implémenté")
+    
+    # 5. Inscrire les joueurs qualifiés à la phase suivante
+    ordre_inscription = 1
+    for joueur_id in joueurs_qualifies:
+        # Vérifier si pas déjà inscrit
+        existing = db.execute(
+            select(models.phase_evenement_joueur).where(
+                models.phase_evenement_joueur.c.phase_id == phase_suivante.phase_id,
+                models.phase_evenement_joueur.c.evenement_id == evenement_id,
+                models.phase_evenement_joueur.c.joueur_id == joueur_id
+            )
+        ).first()
+        
+        if not existing:
+            db.execute(
+                models.phase_evenement_joueur.insert().values(
+                    phase_id=phase_suivante.phase_id,
+                    evenement_id=evenement_id,
+                    joueur_id=joueur_id,
+                    ordre_inscription=ordre_inscription,
+                    statut='qualifie',
+                    phase_origine_id=phase_id  # Tracer d'où vient la qualification
+                )
+            )
+            ordre_inscription += 1
+    
+    db.commit()
+    
+    return {
+        "message": "Qualification effectuée avec succès",
+        "phase_actuelle": phase_id,
+        "phase_suivante": phase_suivante.phase_id,
+        "joueurs_qualifies": len(joueurs_qualifies),
+        "mode": mode
+    }
+
+def calculer_classement_phase(phase_id: str, evenement_id: str, db_phase: models.Phase, db: Session) -> List[Dict]:
+    """Calcule le classement d'une phase selon les règles de scoring configurées"""
+    
+    # Récupérer tous les joueurs de la phase
+    joueurs_inscrits = db.execute(
+        select(models.phase_evenement_joueur).where(
+            models.phase_evenement_joueur.c.phase_id == phase_id,
+            models.phase_evenement_joueur.c.evenement_id == evenement_id
+        )
+    ).all()
+    
+    if not joueurs_inscrits:
+        return []
+    
+    # Initialiser le classement
+    classement = {}
+    for inscription in joueurs_inscrits:
+        joueur_id = inscription.joueur_id
+        classement[joueur_id] = {
+            'joueur_id': joueur_id,
+            'victoires': 0,
+            'rencontres_jouees': 0,
+            'touches_donnees': 0,
+            'touches_recues': 0,
+            'vm': 0,
+            'indice': 0
+        }
+    
+    # Récupérer toutes les rencontres de cette phase
+    rencontres = db.query(models.Rencontre).filter(
+        models.Rencontre.phase_id == phase_id,
+        models.Rencontre.evenement_id == evenement_id
+    ).all()
+    
+    # Calculer les statistiques pour chaque joueur
+    for rencontre in rencontres:
+        resultats = db.query(models.Resultat).filter(
+            models.Resultat.rencontre_id == rencontre.id
+        ).all()
+        
+        if len(resultats) == 2:
+            r1, r2 = resultats[0], resultats[1]
+            
+            # Joueur 1
+            if r1.joueur_id in classement:
+                classement[r1.joueur_id]['rencontres_jouees'] += 1
+                classement[r1.joueur_id]['touches_donnees'] += r1.score or 0
+                classement[r1.joueur_id]['touches_recues'] += r2.score or 0
+                if (r1.score or 0) > (r2.score or 0):
+                    classement[r1.joueur_id]['victoires'] += 1
+            
+            # Joueur 2
+            if r2.joueur_id in classement:
+                classement[r2.joueur_id]['rencontres_jouees'] += 1
+                classement[r2.joueur_id]['touches_donnees'] += r2.score or 0
+                classement[r2.joueur_id]['touches_recues'] += r1.score or 0
+                if (r2.score or 0) > (r1.score or 0):
+                    classement[r2.joueur_id]['victoires'] += 1
+    
+    # Calculer V/M et indice
+    for joueur_id in classement:
+        rencontres = classement[joueur_id]['rencontres_jouees']
+        if rencontres > 0:
+            classement[joueur_id]['vm'] = classement[joueur_id]['victoires'] / rencontres
+        classement[joueur_id]['indice'] = classement[joueur_id]['touches_donnees'] - classement[joueur_id]['touches_recues']
+    
+    # Récupérer l'ordre de priorité du scoring
+    scoring = db_phase.scoring or {}
+    ordre_priorite = scoring.get('ordrePriorite', ['Points de Victoire', 'V/M', 'Indice (GoalAverage)', 'Points mis'])
+    
+    # Mapping des critères
+    critere_mapping = {
+        'Points de Victoire': lambda x: -x['victoires'],
+        'V/M': lambda x: -x['vm'],
+        'Indice (GoalAverage)': lambda x: -x['indice'],
+        'Points mis': lambda x: -x['touches_donnees'],
+        'Points Pris': lambda x: -x['touches_recues']
+    }
+    
+    # Construire la clé de tri
+    def build_sort_key(joueur):
+        return tuple(critere_mapping.get(critere, lambda x: 0)(joueur) for critere in ordre_priorite)
+    
+    # Trier et retourner
+    classement_list = sorted(classement.values(), key=build_sort_key)
+    
+    return classement_list

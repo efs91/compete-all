@@ -135,6 +135,38 @@
                 </div>
             </div>
             
+            <!-- Configuration des décalages de poules -->
+            <div id="decalages-config" style="display: none; border-top: 2px solid #ecf0f1; padding-top: 20px; margin-top: 20px;">
+                <h4 style="color: #9b59b6; margin-bottom: 15px;">🎲 Configuration des décalages de poules</h4>
+                <p style="color: #7f8c8d; font-size: 0.9em; margin-bottom: 15px;">
+                    Éviter de mettre certains joueurs dans la même poule (même club, même nation...)
+                </p>
+                
+                <div class="form-group">
+                    <label>Critères de décalage</label>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <label style="display: flex; align-items: center; gap: 10px; font-weight: normal; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+                            <input type="checkbox" name="decalage_club" value="1">
+                            <span style="flex: 1;">
+                                <strong>Même club</strong>
+                                <small style="display: block; color: #7f8c8d;">Éviter de mettre des joueurs du même club dans la même poule</small>
+                            </span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 10px; font-weight: normal; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+                            <input type="checkbox" name="decalage_nation" value="1">
+                            <span style="flex: 1;">
+                                <strong>Même nation</strong>
+                                <small style="display: block; color: #7f8c8d;">Éviter de mettre des joueurs de la même nationalité dans la même poule</small>
+                            </span>
+                        </label>
+                    </div>
+                    <small style="display: block; margin-top: 10px; color: #7f8c8d;">
+                        ℹ️ L'algorithme essaiera de respecter ces critères tout en gardant un équilibre entre les poules.
+                        Les décalages ne sont pas toujours possibles si trop de joueurs partagent le même critère.
+                    </small>
+                </div>
+            </div>
+            
             <button type="submit" class="btn btn-success" style="margin-top: 20px;">Ajouter cette phase</button>
         </form>
     {% else %}
@@ -170,11 +202,16 @@
     function toggleQualificationConfig() {
         const phaseSelect = document.getElementById('phase_id');
         const configDiv = document.getElementById('qualification-config');
+        const decalagesDiv = document.getElementById('decalages-config');
         
         if (phaseSelect.value) {
             configDiv.style.display = 'block';
+            // Afficher les décalages seulement pour les phases de type poule
+            // TODO: vérifier le type de phase si nécessaire
+            decalagesDiv.style.display = 'block';
         } else {
             configDiv.style.display = 'none';
+            decalagesDiv.style.display = 'none';
         }
     }
     

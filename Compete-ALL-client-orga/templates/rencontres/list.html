@@ -7,7 +7,11 @@
     <h2>Rencontres - {{ phase.nom }}</h2>
     <p><strong>Événement:</strong> {{ evenement.nom }}</p>
     <div style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
-        <a href="{{ url_for('view_feuille_poule', evenement_id=evenement.id, phase_id=phase.id) }}" class="btn btn-primary">📋 Mode Feuille de Poule</a>
+        {% if poules and poules|length == 1 %}
+            <a href="{{ url_for('view_feuille_poule', evenement_id=evenement.id, phase_id=phase.id, poule_id=poules[0].id) }}" class="btn btn-primary">📋 Mode Feuille de Poule</a>
+        {% elif not poules or poules|length == 0 %}
+            <a href="{{ url_for('view_feuille_poule', evenement_id=evenement.id, phase_id=phase.id) }}" class="btn btn-primary">📋 Mode Feuille de Poule</a>
+        {% endif %}
         <a href="{{ url_for('view_evenement', evenement_id=evenement.id) }}" class="btn btn-secondary">← Retour à l'événement</a>
         
         <!-- Bouton Qualifier pour phase suivante (visible si config_qualification existe et phase suivante existe) -->
@@ -69,13 +73,79 @@
 </div>
 {% endif %}
 
+<!-- Afficher les poules si elles existent -->
+{% if poules and poules|length > 0 %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <div>
+            <h3 style="margin: 0;">🎲 Poules de la phase</h3>
+            <p style="color: #7f8c8d; margin: 5px 0 0 0;">
+                {{ poules|length }} poule(s) créée(s) - Cliquez sur une poule pour accéder à sa feuille de saisie
+            </p>
+        </div>
+        <form method="POST" action="{{ url_for('generer_poules', evenement_id=evenement.id, phase_id=phase.id) }}" 
+              style="margin: 0;" 
+              onsubmit="return confirm('⚠️ ATTENTION : Recréer les poules ?\n\n✗ Cela va SUPPRIMER :\n   • Toutes les poules actuelles\n   • Toutes les rencontres de ces poules\n   • Tous les résultats saisis\n\n✓ Puis recréer de nouvelles poules avec la configuration actuelle.\n\nContinuer ?');">
+            <button type="submit" class="btn btn-warning">🔄 Recréer les poules</button>
+        </form>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; margin-top: 15px;">
+        {% for poule in poules %}
+        {% set prog = progression_poules.get(poule.id, {'total': 0, 'terminees': 0}) %}
+        {% set pourcentage = (prog.terminees * 100 / prog.total)|int if prog.total > 0 else 0 %}
+        {% set couleur_bordure = '#27ae60' if pourcentage == 100 else ('#f39c12' if pourcentage > 0 else '#3498db') %}
+        
+        <div style="border: 2px solid {{ couleur_bordure }}; border-radius: 8px; padding: 15px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h4 style="margin: 0; color: #2c3e50;">{{ poule.nom }}</h4>
+                {% if pourcentage == 100 %}
+                    <span style="font-size: 1.5em;">✅</span>
+                {% elif pourcentage > 0 %}
+                    <span style="font-size: 1.2em;">⏳</span>
+                {% endif %}
+            </div>
+            
+            <p style="margin: 5px 0; color: #7f8c8d; font-size: 0.9em;">
+                👥 {{ poule.nb_joueurs }} joueur(s)<br>
+                ⚔️ {{ prog.total }} rencontre(s)
+            </p>
+            
+            <!-- Barre de progression -->
+            <div style="margin: 10px 0; background: #ecf0f1; border-radius: 10px; height: 20px; overflow: hidden;">
+                <div style="background: {% if pourcentage == 100 %}#27ae60{% elif pourcentage > 0 %}#f39c12{% else %}#95a5a6{% endif %}; height: 100%; width: {{ pourcentage }}%; transition: width 0.3s ease;"></div>
+            </div>
+            <p style="margin: 5px 0; text-align: center; font-weight: bold; color: {% if pourcentage == 100 %}#27ae60{% elif pourcentage > 0 %}#f39c12{% else %}#7f8c8d{% endif %}; font-size: 0.9em;">
+                {{ prog.terminees }}/{{ prog.total }} matchs
+                {% if pourcentage == 100 %}
+                    <span style="color: #27ae60;">● Terminée</span>
+                {% elif pourcentage > 0 %}
+                    <span style="color: #f39c12;">● En cours</span>
+                {% else %}
+                    <span style="color: #95a5a6;">● À faire</span>
+                {% endif %}
+            </p>
+            
+            <div style="margin-top: 15px; display: flex; gap: 8px; flex-wrap: wrap;">
+                <a href="{{ url_for('view_feuille_poule', evenement_id=evenement.id, phase_id=phase.id, poule_id=poule.id) }}" 
+                   class="btn btn-primary btn-small" style="flex: 1;">
+                    📋 Feuille de poule
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
 {% if rencontres %}
     <div class="card">
-        <h3>📋 Liste des rencontres</h3>
+        <h3>📋 Liste des rencontres{% if poules and poules|length > 0 %} (toutes poules confondues){% endif %}</h3>
         <table style="margin-top: 15px;">
             <thead>
                 <tr>
                     <th>#</th>
+                    {% if poules and poules|length > 0 %}<th>Poule</th>{% endif %}
                     <th>Participants</th>
                     <th>Statut</th>
                     <th>Actions</th>
@@ -85,6 +155,18 @@
                 {% for rencontre in rencontres %}
                 <tr>
                     <td>Match {{ loop.index }}</td>
+                    {% if poules and poules|length > 0 %}
+                    <td>
+                        {% for poule in poules %}
+                            {% if poule.id == rencontre.poule_id %}
+                                <span class="badge badge-info">{{ poule.nom }}</span>
+                            {% endif %}
+                        {% endfor %}
+                        {% if not rencontre.poule_id %}
+                            <span class="badge" style="background: #95a5a6;">Sans poule</span>
+                        {% endif %}
+                    </td>
+                    {% endif %}
                     <td>
                         {% if rencontre.participants_details %}
                             {% for participant in rencontre.participants_details %}

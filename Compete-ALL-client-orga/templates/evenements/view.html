@@ -49,12 +49,31 @@
         <a href="{{ url_for('manage_inscriptions', evenement_id=evenement.id) }}" class="btn">👥 Gérer les inscriptions</a>
         <a href="{{ url_for('view_classements', evenement_id=evenement.id) }}" class="btn">📊 Voir les classements</a>
         
-        <!-- Bouton Lancer la compétition (toujours visible) -->
-        <form method="POST" action="{{ url_for('lancer_competition', evenement_id=evenement.id) }}" 
-              style="display: inline; margin: 0;" 
-              onsubmit="return confirm('🚀 LANCER LA COMPÉTITION ?\n\n✅ Inscrire tous les joueurs à la première phase\n📊 Générer les poules automatiquement\n⚔️ Créer toutes les rencontres\n\nContinuer ?');">
-            <button type="submit" class="btn btn-success" style="font-weight: bold; font-size: 1.1em;">🚀 Lancer la compétition</button>
-        </form>
+        <!-- Boutons conditionnels selon le statut de l'événement -->
+        {% if evenement.statut == 'brouillon' or not evenement.statut %}
+            <!-- Compétition pas encore lancée -->
+            <form method="POST" action="{{ url_for('lancer_competition', evenement_id=evenement.id) }}" 
+                  style="display: inline; margin: 0;" 
+                  onsubmit="return confirm('🚀 LANCER LA COMPÉTITION ?\n\n✅ Inscrire tous les joueurs à la première phase\n📊 Générer les poules automatiquement\n⚔️ Créer toutes les rencontres\n\nContinuer ?');">
+                <button type="submit" class="btn btn-success" style="font-weight: bold; font-size: 1.1em;">🚀 Lancer la compétition</button>
+            </form>
+        {% else %}
+            <!-- Compétition déjà lancée -->
+            <form method="POST" action="{{ url_for('relancer_competition', evenement_id=evenement.id) }}" 
+                  style="display: inline; margin: 0;" 
+                  onsubmit="return confirm('⚠️ RELANCER LA COMPÉTITION ?\n\n🔴 ATTENTION : Cette action va :\n❌ Supprimer TOUTES les poules\n❌ Supprimer TOUTES les rencontres\n❌ Supprimer TOUS les résultats\n\n⚠️ Vous repartirez de zéro !\n\nÊtes-vous VRAIMENT sûr ?');">
+                <button type="submit" class="btn" style="background: #e74c3c; color: white; font-weight: bold; font-size: 1.1em;">🔄 Relancer la compétition</button>
+            </form>
+            
+            <!-- Bouton Passer à la phase suivante (visible uniquement si première phase complète) -->
+            {% if phases and phases|length > 1 %}
+                <form method="POST" action="{{ url_for('progresser_phase', evenement_id=evenement.id, phase_id=phases[0].id) }}" 
+                      style="display: inline; margin: 0;" 
+                      onsubmit="return confirm('➡️ PASSER À LA PHASE SUIVANTE ?\n\n✅ Qualifier les joueurs selon la configuration\n📋 Créer la structure de la phase suivante\n⚔️ Générer les nouvelles rencontres\n\nContinuer ?');">
+                    <button type="submit" class="btn btn-primary" style="font-weight: bold; font-size: 1.1em;">➡️ Passer à la phase 2</button>
+                </form>
+            {% endif %}
+        {% endif %}
     </div>
 </div>
 

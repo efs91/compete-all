@@ -176,12 +176,17 @@ def add_phase_to_event(
         
         next_ordre = (max_ordre or 0) + 1
         
-        # Ajouter la relation phase-événement avec l'ordre et la config de qualification
+        # Fusionner config_qualification et config_decalages dans un seul JSON
+        config = phase_relation.config_qualification or {}
+        if phase_relation.config_decalages:
+            config['decalages'] = phase_relation.config_decalages
+        
+        # Ajouter la relation phase-événement avec l'ordre et la config complète
         stmt = models.phase_evenement.insert().values(
             phase_id=phase_relation.phase_id,
             evenement_id=evenement_id,
             ordre=next_ordre,
-            config_qualification=phase_relation.config_qualification
+            config_qualification=config
         )
         db.execute(stmt)
     
@@ -457,6 +462,73 @@ def remove_joueur_from_phase_in_event(evenement_id: str, phase_id: str, joueur_i
     
     db.commit()
     return {"message": "Joueur retiré de la phase"}
+
+@router.get("/evenements/{evenement_id}/phases/{phase_id}/completion-status")
+def check_phase_completion(evenement_id: str, phase_id: str, db: Session = Depends(get_db)):
+    """Vérifie si une phase est complètement terminée (toutes les rencontres ont des résultats)"""
+    # Vérifier que la phase existe dans cet événement
+    phase_event_rel = db.execute(
+        models.phase_evenement.select().where(
+            models.phase_evenement.c.phase_id == phase_id,
+            models.phase_evenement.c.evenement_id == evenement_id
+        )
+    ).first()
+    
+    if not phase_event_rel:
+        raise HTTPException(status_code=404, detail="Phase non trouvée dans cet événement")
+    
+    # Récupérer toutes les rencontres de cette phase dans cet événement
+    rencontres = db.query(models.Rencontre).filter(
+        models.Rencontre.phase_id == phase_id,
+        models.Rencontre.evenement_id == evenement_id
+    ).all()
+    
+    if not rencontres:
+        return {
+            "complete": False,
+            "message": "Aucune rencontre créée pour cette phase",
+            "total_rencontres": 0,
+            "rencontres_terminees": 0,
+            "pourcentage": 0
+        }
+    
+    # Vérifier combien de rencontres ont des résultats
+    rencontres_avec_resultats = 0
+    details_manquants = []
+    
+    for rencontre in rencontres:
+        resultats = db.query(models.Resultat).filter(
+            models.Resultat.rencontre_id == rencontre.id
+        ).all()
+        
+        if resultats and len(resultats) > 0:
+            rencontres_avec_resultats += 1
+        else:
+            # Récupérer les noms des joueurs pour le détail
+            joueur_names = []
+            if rencontre.participants:
+                for joueur_id in rencontre.participants:
+                    joueur = db.query(models.Joueur).filter(models.Joueur.id == joueur_id).first()
+                    if joueur:
+                        joueur_names.append(f"{joueur.prenom or ''} {joueur.nom or joueur.username}".strip())
+            
+            details_manquants.append({
+                "rencontre_id": rencontre.id,
+                "joueurs": joueur_names,
+                "poule_id": rencontre.poule_id
+            })
+    
+    total_rencontres = len(rencontres)
+    pourcentage = int((rencontres_avec_resultats / total_rencontres) * 100) if total_rencontres > 0 else 0
+    complete = rencontres_avec_resultats == total_rencontres
+    
+    return {
+        "complete": complete,
+        "total_rencontres": total_rencontres,
+        "rencontres_terminees": rencontres_avec_resultats,
+        "pourcentage": pourcentage,
+        "rencontres_manquantes": details_manquants if not complete else []
+    }
 
 @router.put("/evenements/{evenement_id}/phases/reorder")
 def reorder_phases(evenement_id: str, phase_orders: List[Dict], db: Session = Depends(get_db)):

@@ -8,6 +8,7 @@ class EvenementBase(BaseModel):
     date_debut: datetime
     date_fin: datetime
     description: Optional[str] = None
+    statut: Optional[str] = 'brouillon'
 
 class EvenementCreate(EvenementBase):
     pass
@@ -137,6 +138,7 @@ class PhaseEventRelation(BaseModel):
     evenement_id: str
     joueurs: Optional[List[PhaseEvenementJoueurCreate]] = None
     config_qualification: Optional[dict] = None  # Configuration de qualification
+    config_decalages: Optional[dict] = None  # Configuration des décalages de poules
 
 class PhaseInEvent(PhaseBase):
     id: str

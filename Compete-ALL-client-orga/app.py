@@ -216,12 +216,19 @@ def add_phase(evenement_id):
             else:
                 config_qualification['nb_qualifies'] = int(request.form.get('nb_qualifies', 0))
     
+    # Construire la configuration des décalages de poules
+    config_decalages = {
+        'decalage_club': bool(request.form.get('decalage_club')),
+        'decalage_nation': bool(request.form.get('decalage_nation'))
+    }
+    
     try:
         response = requests.post(f"{API_BASE_URL}/evenements/{evenement_id}/phases",
                                json={
                                    "phase_id": phase_id,
                                    "evenement_id": evenement_id,
-                                   "config_qualification": config_qualification
+                                   "config_qualification": config_qualification,
+                                   "config_decalages": config_decalages
                                })
         if response.status_code in (200, 201):
             flash("Phase ajoutée avec succès!", "success")
@@ -274,6 +281,45 @@ def lancer_competition(evenement_id):
         else:
             error_detail = response.json().get('detail', response.text)
             flash(f"Erreur lors du lancement: {error_detail}", "error")
+    except Exception as e:
+        flash(f"Erreur: {str(e)}", "error")
+    
+    return redirect(url_for('view_evenement', evenement_id=evenement_id))
+
+@app.route('/evenements/<evenement_id>/relancer', methods=['POST'])
+def relancer_competition(evenement_id):
+    """Relance la compétition : supprime toutes les données et remet à zéro"""
+    try:
+        response = requests.post(f"{API_BASE_URL}/evenements/{evenement_id}/relancer")
+        
+        if response.status_code in (200, 201):
+            flash(f"🔄 Compétition relancée : toutes les données ont été supprimées", "success")
+        else:
+            error_detail = response.json().get('detail', response.text)
+            flash(f"Erreur lors du relancement: {error_detail}", "error")
+    except Exception as e:
+        flash(f"Erreur: {str(e)}", "error")
+    
+    return redirect(url_for('view_evenement', evenement_id=evenement_id))
+
+@app.route('/evenements/<evenement_id>/phases/<phase_id>/progresser', methods=['POST'])
+def progresser_phase(evenement_id, phase_id):
+    """Progresse vers la phase suivante : qualifie et lance la phase suivante"""
+    try:
+        response = requests.post(f"{API_BASE_URL}/evenements/{evenement_id}/phases/{phase_id}/progresser")
+        
+        if response.status_code in (200, 201):
+            result = response.json()
+            flash(f"🎉 Progression réussie vers la phase suivante !", "success")
+            flash(f"✅ {result['joueurs_qualifies']} joueurs qualifiés", "success")
+            if result.get('nb_poules_creees', 0) > 0:
+                flash(f"📊 {result['nb_poules_creees']} poules créées", "success")
+            if result.get('rencontres_creees', 0) > 0:
+                flash(f"⚔️ {result['rencontres_creees']} rencontres générées", "success")
+            return redirect(url_for('manage_phases', evenement_id=evenement_id))
+        else:
+            error_detail = response.json().get('detail', response.text)
+            flash(f"Erreur lors de la progression: {error_detail}", "error")
     except Exception as e:
         flash(f"Erreur: {str(e)}", "error")
     
@@ -417,7 +463,7 @@ def generer_poules(evenement_id, phase_id):
         
         if response.status_code in (200, 201):
             result = response.json()
-            flash(f"✅ {result['nb_poules']} poules créées avec {result['nb_joueurs_total']} joueurs", "success")
+            flash(f"✅ {result['nb_poules']} poules et {result.get('rencontres_creees', 0)} rencontres créées avec {result['nb_joueurs_total']} joueurs", "success")
             # Afficher les détails des poules
             for poule in result.get('poules', []):
                 flash(f"   • {poule['nom']} : {len(poule['joueurs'])} joueurs", "info")
@@ -427,8 +473,8 @@ def generer_poules(evenement_id, phase_id):
     except Exception as e:
         flash(f"Erreur: {str(e)}", "error")
     
-    # Rester sur la page de génération pour passer à l'étape 2 (générer les rencontres)
-    return redirect(url_for('generate_rencontres', evenement_id=evenement_id, phase_id=phase_id))
+    # Retourner sur la page rencontres pour voir les poules créées
+    return redirect(url_for('view_rencontres', evenement_id=evenement_id, phase_id=phase_id))
 
 @app.route('/evenements/<evenement_id>/phases/<phase_id>/generate', methods=['GET', 'POST'])
 def generate_rencontres(evenement_id, phase_id):
@@ -509,12 +555,33 @@ def view_rencontres(evenement_id, phase_id):
         # Utiliser la nouvelle route optimisée qui retourne tout en une seule requête
         rencontres_response = requests.get(f"{API_BASE_URL}/phases/{phase_id}/rencontres-complete")
         
+        # Récupérer les poules de cette phase
+        poules_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}/phases/{phase_id}/poules")
+        
         evenement = event_response.json() if event_response.status_code == 200 else {}
         phases_in_event = phase_in_event_response.json() if phase_in_event_response.status_code == 200 else []
         
         # Trouver la phase actuelle avec sa config_qualification
         phase = next((p for p in phases_in_event if p['id'] == phase_id), {})
         rencontres = rencontres_response.json() if rencontres_response.status_code == 200 else []
+        poules = poules_response.json() if poules_response.status_code == 200 else []
+        
+        # Organiser les rencontres par poule et calculer la progression
+        rencontres_by_poule = {}
+        progression_poules = {}
+        
+        for rencontre in rencontres:
+            poule_id = rencontre.get('poule_id', 'no_poule')
+            if poule_id not in rencontres_by_poule:
+                rencontres_by_poule[poule_id] = []
+                progression_poules[poule_id] = {'total': 0, 'terminees': 0}
+            
+            rencontres_by_poule[poule_id].append(rencontre)
+            progression_poules[poule_id]['total'] += 1
+            
+            # Compter si la rencontre a des résultats
+            if rencontre.get('resultats') and len(rencontre['resultats']) > 0:
+                progression_poules[poule_id]['terminees'] += 1
         
         # Récupérer les joueurs inscrits et calculer le classement provisoire
         joueurs_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}/phases/{phase_id}/joueurs")
@@ -525,13 +592,17 @@ def view_rencontres(evenement_id, phase_id):
                              evenement=evenement,
                              phase=phase,
                              rencontres=rencontres,
+                             poules=poules,
+                             rencontres_by_poule=rencontres_by_poule,
+                             progression_poules=progression_poules,
                              classement=classement)
     except Exception as e:
         flash(f"Erreur: {str(e)}", "error")
         return redirect(url_for('view_evenement', evenement_id=evenement_id))
 
 @app.route('/evenements/<evenement_id>/phases/<phase_id>/feuille-poule')
-def view_feuille_poule(evenement_id, phase_id):
+@app.route('/evenements/<evenement_id>/phases/<phase_id>/poules/<poule_id>/feuille-poule')
+def view_feuille_poule(evenement_id, phase_id, poule_id=None):
     """Afficher la feuille de poule (mode saisie arbitre)"""
     try:
         event_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}")
@@ -542,7 +613,16 @@ def view_feuille_poule(evenement_id, phase_id):
         
         # Récupérer les poules de cette phase
         poules_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}/phases/{phase_id}/poules")
-        poules = poules_response.json() if poules_response.status_code == 200 else []
+        all_poules = poules_response.json() if poules_response.status_code == 200 else []
+        
+        # Si un poule_id est fourni, ne garder que cette poule
+        if poule_id:
+            poules = [p for p in all_poules if p['id'] == poule_id]
+            if not poules:
+                flash("Poule non trouvée", "error")
+                return redirect(url_for('view_rencontres', evenement_id=evenement_id, phase_id=phase_id))
+        else:
+            poules = all_poules
         
         # Si pas de poules, afficher tous les joueurs ensemble (ancien comportement)
         if not poules:

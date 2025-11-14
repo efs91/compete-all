@@ -150,6 +150,7 @@ class Evenement(Base):
     date_debut = Column(DateTime, nullable=False)
     date_fin = Column(DateTime, nullable=False)
     description = Column(String(1000), nullable=True)
+    statut = Column(String(50), nullable=False, default='brouillon')  # brouillon, lance, termine
     
     # Mise à jour des relations
     phases = relationship("Phase", secondary=phase_evenement, back_populates="evenements")

@@ -22,6 +22,18 @@ def generer_poules_automatique(evenement_id: str, phase_id: str, db: Session = D
     joueurs_max = config.get('max_joueurs_poule', 8)
     joueurs_souhaite = config.get('ideal_joueurs_poule', 6)
     
+    # Récupérer la configuration des décalages depuis phase_evenement
+    phase_event_rel = db.execute(
+        models.phase_evenement.select().where(
+            models.phase_evenement.c.phase_id == phase_id,
+            models.phase_evenement.c.evenement_id == evenement_id
+        )
+    ).first()
+    
+    config_decalages = {}
+    if phase_event_rel and phase_event_rel.config_qualification:
+        config_decalages = phase_event_rel.config_qualification.get('decalages', {})
+    
     # Récupérer tous les joueurs inscrits à cette phase
     joueurs_inscrits = db.execute(
         models.phase_evenement_joueur.select().where(
@@ -45,6 +57,18 @@ def generer_poules_automatique(evenement_id: str, phase_id: str, db: Session = D
     ).all()
     
     for poule in poules_existantes:
+        # Supprimer les rencontres de cette poule (et leurs résultats via CASCADE)
+        rencontres_poule = db.query(models.Rencontre).filter(
+            models.Rencontre.poule_id == poule.id
+        ).all()
+        
+        for rencontre in rencontres_poule:
+            # Supprimer les résultats de la rencontre (CASCADE devrait le faire mais on force)
+            db.query(models.Resultat).filter(
+                models.Resultat.rencontre_id == rencontre.id
+            ).delete()
+            db.delete(rencontre)
+        
         # Supprimer les associations joueurs
         db.execute(
             models.poule_joueur.delete().where(
@@ -58,7 +82,7 @@ def generer_poules_automatique(evenement_id: str, phase_id: str, db: Session = D
     # Créer les nouvelles poules
     poules = []
     for i in range(nb_poules):
-        nom_poule = f"Poule {chr(65 + i)}" if nb_poules <= 26 else f"Poule {i + 1}"
+        nom_poule = f"Poule {i + 1}"
         poule = models.Poule(
             id=str(uuid.uuid4()),
             phase_id=phase_id,
@@ -72,7 +96,7 @@ def generer_poules_automatique(evenement_id: str, phase_id: str, db: Session = D
     db.commit()
     
     # Répartir les joueurs dans les poules avec décalages intelligents (éviter même club/nation)
-    repartition = repartir_joueurs_serpentin(joueurs_inscrits, nb_poules, db=db)
+    repartition = repartir_joueurs_serpentin(joueurs_inscrits, nb_poules, db=db, config_decalages=config_decalages)
     
     for idx_poule, joueurs_poule in enumerate(repartition):
         poule = poules[idx_poule]
@@ -84,6 +108,33 @@ def generer_poules_automatique(evenement_id: str, phase_id: str, db: Session = D
                     ordre=ordre
                 )
             )
+    
+    db.commit()
+    
+    # ÉTAPE 3 : Générer les rencontres PAR POULE (tous contre tous)
+    import itertools
+    rencontres_creees = 0
+    for poule in poules:
+        # Récupérer les joueurs de cette poule
+        joueurs_poule = db.execute(
+            models.poule_joueur.select().where(
+                models.poule_joueur.c.poule_id == poule.id
+            ).order_by(models.poule_joueur.c.ordre)
+        ).all()
+        
+        joueur_ids = [j.joueur_id for j in joueurs_poule]
+        
+        # Générer tous contre tous dans cette poule
+        for joueur1_id, joueur2_id in itertools.combinations(joueur_ids, 2):
+            rencontre = models.Rencontre(
+                id=str(uuid.uuid4()),
+                phase_id=phase_id,
+                evenement_id=evenement_id,
+                participants=[joueur1_id, joueur2_id],
+                poule_id=poule.id
+            )
+            db.add(rencontre)
+            rencontres_creees += 1
     
     db.commit()
     
@@ -114,9 +165,10 @@ def generer_poules_automatique(evenement_id: str, phase_id: str, db: Session = D
         })
     
     return {
-        "message": f"{nb_poules} poules créées avec succès",
+        "message": f"{nb_poules} poules et {rencontres_creees} rencontres créées avec succès",
         "nb_poules": nb_poules,
         "nb_joueurs_total": nb_joueurs,
+        "rencontres_creees": rencontres_creees,
         "poules": poules_avec_joueurs
     }
 
@@ -149,17 +201,17 @@ def calcul_nombre_poules(nb_joueurs: int, joueurs_min: int, joueurs_max: int, jo
     
     return max(1, nb_poules)
 
-def repartir_joueurs_serpentin(joueurs_inscrits: List, nb_poules: int, db: Session = None) -> List[List]:
+def repartir_joueurs_serpentin(joueurs_inscrits: List, nb_poules: int, db: Session = None, config_decalages: dict = None) -> List[List]:
     """
     Répartit les joueurs en serpentin avec décalages intelligents.
-    Évite de mettre des joueurs du même club ou de la même nation dans la même poule.
+    Évite de mettre des joueurs du même club ou de la même nation dans la même poule selon la configuration.
     """
     from collections import defaultdict
     
     poules = [[] for _ in range(nb_poules)]
     
-    # Si pas de DB fournie, faire la répartition simple en serpentin
-    if db is None:
+    # Si pas de configuration de décalages ou pas de DB, faire la répartition simple en serpentin
+    if db is None or not config_decalages or (not config_decalages.get('decalage_club') and not config_decalages.get('decalage_nation')):
         for idx, joueur in enumerate(joueurs_inscrits):
             cycle = idx // nb_poules
             position_in_cycle = idx % nb_poules
@@ -181,7 +233,7 @@ def repartir_joueurs_serpentin(joueurs_inscrits: List, nb_poules: int, db: Sessi
     def score_conflit(poule, nouveau_joueur_id):
         """
         Calcule un score de conflit : plus le score est élevé, plus il y a de conflits.
-        Retourne le nombre de joueurs avec le même club + nombre avec la même nation.
+        Retourne le nombre de joueurs avec le même club + nombre avec la même nation (selon config).
         """
         if not poule:
             return 0
@@ -196,14 +248,16 @@ def repartir_joueurs_serpentin(joueurs_inscrits: List, nb_poules: int, db: Sessi
             if not joueur:
                 continue
             
-            # Conflit de club (poids 2)
-            if nouveau_joueur.club and joueur.club and nouveau_joueur.club.strip().lower() == joueur.club.strip().lower():
-                conflits += 2
+            # Conflit de club (poids 2) - seulement si activé dans config
+            if config_decalages.get('decalage_club'):
+                if nouveau_joueur.club and joueur.club and nouveau_joueur.club.strip().lower() == joueur.club.strip().lower():
+                    conflits += 2
             
-            # Conflit de nation (poids 1)
-            if hasattr(nouveau_joueur, 'nation') and hasattr(joueur, 'nation'):
-                if nouveau_joueur.nation and joueur.nation and nouveau_joueur.nation.strip().lower() == joueur.nation.strip().lower():
-                    conflits += 1
+            # Conflit de nation (poids 1) - seulement si activé dans config
+            if config_decalages.get('decalage_nation'):
+                if hasattr(nouveau_joueur, 'nation') and hasattr(joueur, 'nation'):
+                    if nouveau_joueur.nation and joueur.nation and nouveau_joueur.nation.strip().lower() == joueur.nation.strip().lower():
+                        conflits += 1
         
         return conflits
     

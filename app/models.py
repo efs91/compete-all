@@ -166,6 +166,8 @@ class Rencontre(Base):
     evenement_id = Column(String(36), ForeignKey("evenements.id"), nullable=False)  # Ajout de l'événement
     participants = Column(JSON, nullable=True)  # Liste des IDs des participants ["joueur_id1", "joueur_id2", ...]
     poule_id = Column(String(36), ForeignKey("poules.id"), nullable=True)  # ID de la poule (si applicable)
+    tour = Column(Integer, nullable=False, default=1)  # Numéro du tour dans le bracket (1, 2, 3...)
+    position = Column(Integer, nullable=False, default=0)  # Position du match dans le tour (pour l'ordre)
     
     phase = relationship("Phase", back_populates="rencontres")
     evenement = relationship("Evenement")  # Ajout de la relation avec l'événement

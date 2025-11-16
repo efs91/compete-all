@@ -588,9 +588,13 @@ def view_rencontres(evenement_id, phase_id):
         joueurs = joueurs_response.json() if joueurs_response.status_code == 200 else []
         classement = calculate_provisional_ranking(phase_id, joueurs)
         
+        # Détecter le type de phase pour afficher le bon mode
+        type_general = phase.get('type_general', 'poule')
+        
         return render_template('rencontres/list.html',
                              evenement=evenement,
                              phase=phase,
+                             type_general=type_general,
                              rencontres=rencontres,
                              poules=poules,
                              rencontres_by_poule=rencontres_by_poule,
@@ -599,6 +603,140 @@ def view_rencontres(evenement_id, phase_id):
     except Exception as e:
         flash(f"Erreur: {str(e)}", "error")
         return redirect(url_for('view_evenement', evenement_id=evenement_id))
+
+@app.route('/evenements/<evenement_id>/phases/<phase_id>/tableau')
+def view_tableau_bracket(evenement_id, phase_id):
+    """Afficher le tableau d'élimination directe (bracket)"""
+    import math
+    
+    try:
+        event_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}")
+        phase_in_event_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}/phases")
+        rencontres_response = requests.get(f"{API_BASE_URL}/phases/{phase_id}/rencontres-complete")
+        joueurs_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}/phases/{phase_id}/joueurs")
+        
+        evenement = event_response.json() if event_response.status_code == 200 else {}
+        phases_in_event = phase_in_event_response.json() if phase_in_event_response.status_code == 200 else []
+        phase = next((p for p in phases_in_event if p['id'] == phase_id), {})
+        rencontres = rencontres_response.json() if rencontres_response.status_code == 200 else []
+        joueurs_data = joueurs_response.json() if joueurs_response.status_code == 200 else []
+        
+        # Créer un dictionnaire de joueurs pour accès rapide par ID
+        # La structure peut être soit directe, soit avec un champ 'joueur' imbriqué
+        joueurs_dict = {}
+        for j in joueurs_data:
+            if 'joueur' in j:
+                # Structure avec joueur imbriqué
+                joueur = j['joueur']
+                joueurs_dict[joueur['id']] = joueur
+            else:
+                # Structure directe
+                joueurs_dict[j['id']] = j
+        
+        # Calculer la taille du tableau (puissance de 2)
+        nb_joueurs = len(joueurs_dict)
+        taille_tableau = 1
+        while taille_tableau < nb_joueurs:
+            taille_tableau *= 2
+        
+        # Calculer le nombre de tours (log2 de la taille)
+        nb_tours = int(math.log2(taille_tableau)) if taille_tableau > 0 else 1
+        
+        # Organiser les rencontres par tours en fonction du champ 'tour'
+        rencontres_par_tour = {}
+        for rencontre in rencontres:
+            tour = rencontre.get('tour', 1)  # Par défaut tour 1
+            if tour not in rencontres_par_tour:
+                rencontres_par_tour[tour] = []
+            rencontres_par_tour[tour].append(rencontre)
+        
+        # Trier les rencontres de chaque tour par position
+        for tour in rencontres_par_tour:
+            rencontres_par_tour[tour].sort(key=lambda r: r.get('position', 0))
+        
+        # Générer les noms de tours
+        noms_tours = {}
+        for i in range(1, nb_tours + 1):
+            if i == nb_tours:
+                noms_tours[i] = "Finale"
+            elif i == nb_tours - 1:
+                noms_tours[i] = "Demi-Finales"
+            elif i == nb_tours - 2:
+                noms_tours[i] = "Quarts de Finale"
+            else:
+                # 1/8, 1/16, 1/32...
+                fraction = 2 ** (nb_tours - i + 1)
+                noms_tours[i] = f"1/{fraction} de Finale"
+        
+        return render_template('rencontres/tableau_bracket.html',
+                             evenement=evenement,
+                             phase=phase,
+                             rencontres=rencontres,
+                             rencontres_par_tour=rencontres_par_tour,
+                             joueurs_dict=joueurs_dict,
+                             taille_tableau=taille_tableau,
+                             nb_tours=nb_tours,
+                             noms_tours=noms_tours)
+    except Exception as e:
+        flash(f"Erreur: {str(e)}", "error")
+        return redirect(url_for('view_rencontres', evenement_id=evenement_id, phase_id=phase_id))
+
+@app.route('/api/rencontres/<rencontre_id>/resultats', methods=['POST'])
+def save_tableau_score(rencontre_id):
+    """Sauvegarder les résultats d'un match de tableau avec auto-validation"""
+    try:
+        data = request.json
+        resultats = data.get('resultats', [])
+        
+        if not resultats or len(resultats) != 2:
+            return jsonify({'error': 'Il faut exactement 2 résultats'}), 400
+        
+        # Vérifier pas d'égalité
+        scores = [r['points'] for r in resultats]
+        if scores[0] == scores[1]:
+            return jsonify({'error': 'Match nul impossible'}), 400
+        
+        # D'abord supprimer les anciens résultats s'ils existent
+        try:
+            requests.delete(f"{API_BASE_URL}/rencontres/{rencontre_id}/resultats")
+        except:
+            pass  # Ignore si pas de résultats existants
+        
+        # Envoyer chaque résultat individuellement à l'API backend
+        for resultat in resultats:
+            response = requests.post(
+                f"{API_BASE_URL}/rencontres/{rencontre_id}/resultats",
+                json=resultat
+            )
+            
+            if response.status_code not in [200, 201]:
+                return jsonify({'error': f'Erreur API: {response.text}'}), response.status_code
+        
+        return jsonify({'success': True, 'message': 'Score sauvegardé'})
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/evenements/<evenement_id>/phases/<phase_id>/tableau/generate-next-round', methods=['POST'])
+def generate_next_round(evenement_id, phase_id):
+    """Générer automatiquement le tour suivant du tableau"""
+    try:
+        current_tour = request.args.get('current_tour', type=int)
+        if not current_tour:
+            return jsonify({'error': 'current_tour manquant'}), 400
+        
+        response = requests.post(
+            f"{API_BASE_URL}/evenements/{evenement_id}/phases/{phase_id}/tableau/generate-next-round",
+            params={'current_tour': current_tour}
+        )
+        
+        if response.status_code == 200:
+            return jsonify(response.json())
+        else:
+            return jsonify({'error': 'Erreur API', 'details': response.text}), response.status_code
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/evenements/<evenement_id>/phases/<phase_id>/feuille-poule')
 @app.route('/evenements/<evenement_id>/phases/<phase_id>/poules/<poule_id>/feuille-poule')

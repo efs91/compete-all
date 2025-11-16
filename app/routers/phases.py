@@ -43,6 +43,7 @@ def format_phase_response(db_phase: models.Phase, evenement_id: str, db: Session
         'configuration': db_phase.configuration,
         'format': db_phase.format,
         'type': db_phase.type,
+        'type_general': db_phase.type_general,  # AJOUT : type_general pour affichage mode tableau
         'joueurs': formatted_joueurs
     }
     

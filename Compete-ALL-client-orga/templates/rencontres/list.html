@@ -7,10 +7,16 @@
     <h2>Rencontres - {{ phase.nom }}</h2>
     <p><strong>Événement:</strong> {{ evenement.nom }}</p>
     <div style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
-        {% if poules and poules|length == 1 %}
-            <a href="{{ url_for('view_feuille_poule', evenement_id=evenement.id, phase_id=phase.id, poule_id=poules[0].id) }}" class="btn btn-primary">📋 Mode Feuille de Poule</a>
-        {% elif not poules or poules|length == 0 %}
-            <a href="{{ url_for('view_feuille_poule', evenement_id=evenement.id, phase_id=phase.id) }}" class="btn btn-primary">📋 Mode Feuille de Poule</a>
+        {% if type_general == 'poule' %}
+            <!-- Mode Feuille de Poule pour les phases de poules -->
+            {% if poules and poules|length == 1 %}
+                <a href="{{ url_for('view_feuille_poule', evenement_id=evenement.id, phase_id=phase.id, poule_id=poules[0].id) }}" class="btn btn-primary">📋 Mode Feuille de Poule</a>
+            {% elif not poules or poules|length == 0 %}
+                <a href="{{ url_for('view_feuille_poule', evenement_id=evenement.id, phase_id=phase.id) }}" class="btn btn-primary">📋 Mode Feuille de Poule</a>
+            {% endif %}
+        {% elif type_general in ['elimination', 'tableau'] %}
+            <!-- Mode Tableau pour les phases d'élimination directe -->
+            <a href="{{ url_for('view_tableau_bracket', evenement_id=evenement.id, phase_id=phase.id) }}" class="btn btn-primary" style="background: #e67e22;">🏆 Mode Tableau</a>
         {% endif %}
         <a href="{{ url_for('view_evenement', evenement_id=evenement.id) }}" class="btn btn-secondary">← Retour à l'événement</a>
         

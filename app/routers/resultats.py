@@ -31,6 +31,52 @@ def create_resultat(rencontre_id: str, resultat: schemas.ResultatCreate, db: Ses
     db.add(db_resultat)
     db.commit()
     db.refresh(db_resultat)
+    
+    # Si c'est un tableau d'élimination, mettre à jour le match du tour suivant avec le gagnant
+    phase = db.query(models.Phase).filter(models.Phase.id == db_rencontre.phase_id).first()
+    if phase and phase.type_general in ['elimination', 'tableau'] and db_rencontre.tour:
+        # Vérifier si ce match est terminé (tous les résultats saisis)
+        tous_resultats = db.query(models.Resultat).filter(
+            models.Resultat.rencontre_id == rencontre_id
+        ).all()
+        
+        if len(tous_resultats) == len(db_rencontre.participants):
+            # Match terminé, trouver le gagnant (classement = 1)
+            gagnant = next((r for r in tous_resultats if r.classement == 1), None)
+            
+            if gagnant:
+                # Calculer la position du match suivant : position_suivante = position_actuelle // 2
+                position_suivante = db_rencontre.position // 2
+                tour_suivant = db_rencontre.tour + 1
+                
+                # Trouver le match du tour suivant
+                match_suivant = db.query(models.Rencontre).filter(
+                    models.Rencontre.phase_id == db_rencontre.phase_id,
+                    models.Rencontre.tour == tour_suivant,
+                    models.Rencontre.position == position_suivante
+                ).first()
+                
+                if match_suivant:
+                    # Déterminer la position dans le match suivant
+                    # Match position paire (0, 2, 4...) → position 0 du match suivant
+                    # Match position impaire (1, 3, 5...) → position 1 du match suivant
+                    position_dans_match_suivant = db_rencontre.position % 2
+                    
+                    # Initialiser le tableau avec 2 places si vide
+                    if not match_suivant.participants or len(match_suivant.participants) == 0:
+                        match_suivant.participants = [None, None]
+                    elif len(match_suivant.participants) == 1:
+                        match_suivant.participants.append(None)
+                    
+                    # Placer le gagnant à la bonne position
+                    match_suivant.participants[position_dans_match_suivant] = gagnant.participant_id
+                    
+                    # Nettoyer les None pour avoir une liste propre
+                    match_suivant.participants = [p for p in match_suivant.participants if p is not None]
+                    
+                    db.add(match_suivant)
+                    db.commit()
+    
     return db_resultat
 
 @router.get("/rencontres/{rencontre_id}/resultats", response_model=List[schemas.Resultat])

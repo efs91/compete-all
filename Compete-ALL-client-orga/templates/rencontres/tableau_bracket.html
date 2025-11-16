@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+
+{% block title %}Tableau - {{ phase.nom }}{% endblock %}
+
+{% block content %}
+<style>
+    .bracket-container {
+        display: flex;
+        gap: 80px;
+        overflow-x: auto;
+        padding: 30px 20px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        margin-top: 20px;
+        font-family: 'Courier New', monospace;
+    }
+    
+    .bracket-round {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-around;
+        min-width: 250px;
+    }
+    
+    .round-title {
+        text-align: center;
+        font-weight: bold;
+        font-size: 1em;
+        margin-bottom: 30px;
+        padding: 6px;
+        background: #3498db;
+        color: white;
+        border-radius: 3px;
+        font-family: Arial, sans-serif;
+    }
+    
+    .round-title.finale { background: #27ae60; }
+    .round-title.demi { background: #e67e22; }
+    
+    .bracket-match {
+        position: relative;
+        margin: 20px 0;
+    }
+    
+    .match-line {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 0;
+        font-size: 0.9em;
+        line-height: 1.4;
+    }
+    
+    .match-line.winner .player-name {
+        font-weight: bold;
+        color: #27ae60;
+    }
+    
+    .match-line.bye {
+        color: #95a5a6;
+        font-style: italic;
+    }
+    
+    .player-name {
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 180px;
+    }
+    
+    .player-club {
+        font-size: 0.75em;
+        color: #7f8c8d;
+    }
+    
+    .score-input {
+        width: 35px !important;
+        min-width: 35px;
+        max-width: 35px;
+        flex-shrink: 0;
+        padding: 2px 4px;
+        text-align: center;
+        font-weight: bold;
+        border: 1px solid #bdc3c7;
+        border-radius: 2px;
+        font-size: 0.9em;
+        font-family: 'Courier New', monospace;
+    }
+    
+    .score-input:focus {
+        outline: none;
+        border-color: #3498db;
+    }
+    
+    .qualified-tag {
+        color: #27ae60;
+        font-weight: bold;
+        font-size: 0.85em;
+    }
+    
+    /* Lignes de connexion simples */
+    .bracket-match::before {
+        content: '';
+        position: absolute;
+        left: 100%;
+        top: 25%;
+        width: 40px;
+        height: 1px;
+        background: #bdc3c7;
+    }
+    
+    .bracket-match::after {
+        content: '';
+        position: absolute;
+        left: 100%;
+        top: 75%;
+        width: 40px;
+        height: 1px;
+        background: #bdc3c7;
+    }
+    
+    .bracket-match .connector {
+        position: absolute;
+        left: calc(100% + 40px);
+        top: 25%;
+        width: 1px;
+        height: 50%;
+        background: #bdc3c7;
+    }
+    
+    .bracket-match .connector-out {
+        position: absolute;
+        left: calc(100% + 40px);
+        top: 50%;
+        width: 40px;
+        height: 1px;
+        background: #bdc3c7;
+    }
+    
+    .bracket-round:last-child .bracket-match::before,
+    .bracket-round:last-child .bracket-match::after,
+    .bracket-round:last-child .connector,
+    .bracket-round:last-child .connector-out {
+        display: none;
+    }
+    
+    .empty-match {
+        text-align: center;
+        padding: 10px;
+        color: #95a5a6;
+        font-size: 0.85em;
+        font-style: italic;
+        font-family: Arial, sans-serif;
+    }
+</style>
+
+<div class="card">
+    <h2>🏆 Tableau - {{ phase.nom }}</h2>
+    <p><strong>{{ evenement.nom }}</strong> | Tableau de {{ taille_tableau }} | {{ nb_tours }} tours</p>
+    <div style="margin-top: 10px; display: flex; gap: 10px;">
+        <a href="{{ url_for('view_rencontres', evenement_id=evenement.id, phase_id=phase.id) }}" class="btn btn-secondary btn-small">← Retour</a>
+    </div>
+</div>
+
+<div class="bracket-container">
+    {% for tour_num in range(1, nb_tours + 1) %}
+        <div class="bracket-round">
+            <div class="round-title {% if tour_num == nb_tours %}finale{% elif tour_num == nb_tours - 1 %}demi{% endif %}">
+                {{ noms_tours[tour_num] }}
+            </div>
+            
+            {% set matchs_du_tour = rencontres_par_tour.get(tour_num, []) %}
+            {% set nb_matchs_attendus = (taille_tableau // (2 ** tour_num))|int %}
+            
+            {% for i in range(nb_matchs_attendus) %}
+                {% set match = matchs_du_tour[i] if i < matchs_du_tour|length else None %}
+                
+                {% if match %}
+                    <div class="bracket-match" data-match-id="{{ match.id }}">
+                        {% if match.participants and match.participants|length == 2 %}
+                            {% for participant_id in match.participants %}
+                                {% set joueur_data = joueurs_dict.get(participant_id) %}
+                                {% set resultat = match.resultats|selectattr('participant_id', 'equalto', participant_id)|first if match.resultats else None %}
+                                
+                                <div class="match-line {% if resultat and resultat.classement == 1 %}winner{% endif %}">
+                                    <span class="player-name">
+                                        {{ joueur_data.username if joueur_data else 'Inconnu' }}
+                                        {% if joueur_data and joueur_data.club %}
+                                            <span class="player-club">: {{ joueur_data.club }}</span>
+                                        {% endif %}
+                                    </span>
+                                    <input type="text" 
+                                           class="score-input" 
+                                           data-match-id="{{ match.id }}"
+                                           data-participant-id="{{ participant_id }}"
+                                           value="{{ resultat.points if resultat else '' }}"
+                                           placeholder="-"
+                                           maxlength="3"
+                                           pattern="[0-9]*"
+                                           onchange="saveScore(this)">
+                                </div>
+                            {% endfor %}
+                            
+                        {% elif match.participants and match.participants|length == 1 %}
+                            {% set joueur_data = joueurs_dict.get(match.participants[0]) %}
+                            <div class="match-line">
+                                <span class="player-name">
+                                    {{ joueur_data.username if joueur_data else 'Inconnu' }}
+                                    {% if joueur_data and joueur_data.club %}
+                                        <span class="player-club">: {{ joueur_data.club }}</span>
+                                    {% endif %}
+                                </span>
+                                <span class="qualified-tag">QUAL</span>
+                            </div>
+                            <div class="match-line bye">
+                                --- Bye ---
+                            </div>
+                        {% else %}
+                            <!-- Match avec participants vides (tours futurs) -->
+                            <div class="match-line">
+                                <span class="player-name">TBD</span>
+                            </div>
+                            <div class="match-line">
+                                <span class="player-name">TBD</span>
+                            </div>
+                        {% endif %}
+                        
+                        <!-- Lignes de connexion -->
+                        <div class="connector"></div>
+                        <div class="connector-out"></div>
+                    </div>
+                {% else %}
+                    <div class="bracket-match">
+                        <div class="empty-match">Erreur: match non trouvé</div>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+    {% endfor %}
+</div>
+
+<script>
+const SCORE_MAX = 99; // Score maximum par défaut (à terme, lire de la config)
+const NB_TOURS = {{ nb_tours }};
+const EVENEMENT_ID = '{{ evenement.id }}';
+const PHASE_ID = '{{ phase.id }}';
+
+function saveScore(input) {
+    const matchId = input.dataset.matchId;
+    const participantId = input.dataset.participantId;
+    let scoreValue = input.value.trim().toUpperCase();
+    
+    // Convertir "V" en score max
+    if (scoreValue === 'V') {
+        scoreValue = SCORE_MAX.toString();
+        input.value = scoreValue; // Afficher le score numérique
+    }
+    
+    // Valider que c'est un nombre
+    if (scoreValue && !/^\d+$/.test(scoreValue)) {
+        alert('Score invalide (entrez un chiffre ou "V" pour victoire)');
+        input.value = '';
+        return;
+    }
+    
+    const score = parseInt(scoreValue) || 0;
+    
+    // Récupérer tous les inputs du même match
+    const matchInputs = document.querySelectorAll(`input[data-match-id="${matchId}"]`);
+    
+    if (matchInputs.length !== 2) return;
+    
+    const scores = Array.from(matchInputs).map(inp => ({
+        participant_id: inp.dataset.participantId,
+        score: inp.value.trim() ? parseInt(inp.value) : null
+    }));
+    
+    // Vérifier que les deux scores sont renseignés
+    if (scores.some(s => s.score === null)) return;
+    
+    // Déterminer le gagnant (score max)
+    const maxScore = Math.max(...scores.map(s => s.score));
+    
+    // Vérifier pas d'égalité
+    if (scores.filter(s => s.score === maxScore).length > 1) {
+        alert('Match nul impossible !');
+        input.value = '';
+        return;
+    }
+    
+    // Construire les résultats
+    const resultats = scores.map(s => ({
+        participant_id: s.participant_id,
+        points: s.score,
+        classement: s.score === maxScore ? 1 : 2,
+        actions: {}
+    }));
+    
+    // Envoyer au serveur
+    fetch(`/api/rencontres/${matchId}/resultats`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resultats: resultats })
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Mettre à jour l'affichage
+        matchInputs.forEach(inp => {
+            const line = inp.closest('.match-line');
+            const isWinner = resultats.find(r => r.participant_id === inp.dataset.participantId).classement === 1;
+            line.classList.toggle('winner', isWinner);
+        });
+        
+        console.log('Score sauvegardé');
+        
+        // Recharger la page pour afficher le gagnant dans le tour suivant
+        setTimeout(() => location.reload(), 500);
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        alert('Erreur lors de la sauvegarde');
+    });
+}
+</script>
+
+{% endblock %}

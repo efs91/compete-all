@@ -171,6 +171,8 @@ class Equipe(EquipeBase):
 # Rencontres
 class RencontreBase(BaseModel):
     participants: Optional[List[str]] = None  # Liste des IDs des participants
+    tour: Optional[int] = 1  # Numéro du tour dans le bracket
+    position: Optional[int] = 0  # Position du match dans le tour
 
 class RencontreCreate(RencontreBase):
     evenement_id: str

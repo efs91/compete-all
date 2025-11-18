@@ -20,6 +20,13 @@
         {% endif %}
         <a href="{{ url_for('view_evenement', evenement_id=evenement.id) }}" class="btn btn-secondary">← Retour à l'événement</a>
         
+        <!-- Bouton Réinitialiser Phase -->
+        <form method="POST" action="{{ url_for('reinitialiser_phase', evenement_id=evenement.id, phase_id=phase.id) }}" 
+              style="display: inline; margin: 0;" 
+              onsubmit="return confirm('⚠️ ATTENTION ! Cela va supprimer TOUTES les rencontres et résultats de cette phase. Continuer ?');">
+            <button type="submit" class="btn" style="background: #c0392b; color: white;">🗑️ Réinitialiser la phase</button>
+        </form>
+        
         <!-- Bouton Qualifier pour phase suivante (visible si config_qualification existe et phase suivante existe) -->
         {% if phase.config_qualification and phase.config_qualification.mode != 'aucune' %}
             <form method="POST" action="{{ url_for('qualifier_phase', evenement_id=evenement.id, phase_id=phase.id) }}" 

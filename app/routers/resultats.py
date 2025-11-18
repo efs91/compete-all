@@ -62,17 +62,26 @@ def create_resultat(rencontre_id: str, resultat: schemas.ResultatCreate, db: Ses
                     # Match position impaire (1, 3, 5...) → position 1 du match suivant
                     position_dans_match_suivant = db_rencontre.position % 2
                     
-                    # Initialiser le tableau avec 2 places si vide
-                    if not match_suivant.participants or len(match_suivant.participants) == 0:
-                        match_suivant.participants = [None, None]
-                    elif len(match_suivant.participants) == 1:
-                        match_suivant.participants.append(None)
+                    # Récupérer la liste actuelle ou créer une nouvelle avec 2 places
+                    participants_actuels = match_suivant.participants if match_suivant.participants else []
+                    
+                    # Créer une nouvelle liste avec exactement 2 places
+                    nouveaux_participants = [None, None]
+                    
+                    # Copier les participants existants
+                    for i, p in enumerate(participants_actuels):
+                        if i < 2:
+                            nouveaux_participants[i] = p
                     
                     # Placer le gagnant à la bonne position
-                    match_suivant.participants[position_dans_match_suivant] = gagnant.participant_id
+                    nouveaux_participants[position_dans_match_suivant] = gagnant.participant_id
                     
-                    # Nettoyer les None pour avoir une liste propre
-                    match_suivant.participants = [p for p in match_suivant.participants if p is not None]
+                    # Assigner la nouvelle liste (IMPORTANT: créer une nouvelle liste pour que SQLAlchemy détecte le changement)
+                    match_suivant.participants = nouveaux_participants
+                    
+                    # Marquer explicitement comme modifié pour SQLAlchemy
+                    from sqlalchemy.orm.attributes import flag_modified
+                    flag_modified(match_suivant, 'participants')
                     
                     db.add(match_suivant)
                     db.commit()
@@ -117,4 +126,79 @@ def delete_resultat(resultat_id: str, db: Session = Depends(get_db)):
     
     db.delete(db_resultat)
     db.commit()
-    return {"message": "Résultat supprimé"} 
+    return {"message": "Résultat supprimé"}
+
+@router.put("/rencontres/{rencontre_id}/resultats/bulk")
+def update_rencontre_resultats_bulk(
+    rencontre_id: str, 
+    resultats: List[schemas.ResultatCreate], 
+    db: Session = Depends(get_db)
+):
+    """Mettre à jour tous les résultats d'une rencontre en une seule requête (optimisé)"""
+    
+    # Vérifier que la rencontre existe
+    db_rencontre = db.query(models.Rencontre).filter(models.Rencontre.id == rencontre_id).first()
+    if not db_rencontre:
+        raise HTTPException(status_code=404, detail="Rencontre non trouvée")
+    
+    # Supprimer tous les résultats existants de cette rencontre
+    db.query(models.Resultat).filter(models.Resultat.rencontre_id == rencontre_id).delete()
+    
+    # Créer les nouveaux résultats
+    nouveaux_resultats = []
+    for resultat_data in resultats:
+        # Vérifier que le participant existe
+        participant = db.query(models.Joueur).filter(models.Joueur.id == resultat_data.participant_id).first()
+        if not participant:
+            raise HTTPException(status_code=404, detail=f"Joueur {resultat_data.participant_id} non trouvé")
+        
+        db_resultat = models.Resultat(**resultat_data.dict())
+        db_resultat.rencontre_id = rencontre_id
+        db.add(db_resultat)
+        nouveaux_resultats.append(db_resultat)
+    
+    # Gérer la propagation du gagnant pour les tableaux d'élimination AVANT le commit
+    phase = db.query(models.Phase).filter(models.Phase.id == db_rencontre.phase_id).first()
+    if phase and phase.type_general in ['elimination', 'tableau'] and db_rencontre.tour:
+        # Trouver le gagnant (classement = 1)
+        gagnant_data = next((r for r in resultats if r.classement == 1), None)
+        
+        if gagnant_data:
+            # Calculer la position du match suivant
+            position_suivante = db_rencontre.position // 2
+            tour_suivant = db_rencontre.tour + 1
+            
+            # Trouver le match du tour suivant
+            match_suivant = db.query(models.Rencontre).filter(
+                models.Rencontre.phase_id == db_rencontre.phase_id,
+                models.Rencontre.tour == tour_suivant,
+                models.Rencontre.position == position_suivante
+            ).first()
+            
+            if match_suivant:
+                # Déterminer la position dans le match suivant
+                position_dans_match_suivant = db_rencontre.position % 2
+                
+                # Mettre à jour les participants
+                participants_actuels = match_suivant.participants if match_suivant.participants else []
+                nouveaux_participants = [None, None]
+                
+                for i, p in enumerate(participants_actuels):
+                    if i < 2:
+                        nouveaux_participants[i] = p
+                
+                nouveaux_participants[position_dans_match_suivant] = gagnant_data.participant_id
+                match_suivant.participants = nouveaux_participants
+                
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(match_suivant, 'participants')
+                db.add(match_suivant)
+    
+    # Un seul commit pour tout
+    db.commit()
+    
+    # Rafraîchir pour obtenir les IDs
+    for r in nouveaux_resultats:
+        db.refresh(r)
+    
+    return {"success": True, "message": "Résultats mis à jour"} 

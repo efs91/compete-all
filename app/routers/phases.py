@@ -270,6 +270,64 @@ def read_phase_in_event(evenement_id: str, phase_id: str, db: Session = Depends(
     
     return format_phase_response(db_phase, evenement_id, db)
 
+@router.post("/evenements/{evenement_id}/phases/{phase_id}/reinitialiser")
+def reinitialiser_donnees_phase(evenement_id: str, phase_id: str, db: Session = Depends(get_db)):
+    """Supprime UNIQUEMENT les rencontres et résultats d'une phase (garde la phase et les joueurs inscrits)"""
+    # Vérifier si la phase existe dans l'événement
+    phase_in_event = db.query(models.phase_evenement).filter(
+        models.phase_evenement.c.phase_id == phase_id,
+        models.phase_evenement.c.evenement_id == evenement_id
+    ).first()
+    
+    if not phase_in_event:
+        raise HTTPException(status_code=404, detail="Phase non trouvée dans cet événement")
+    
+    # 1. Récupérer les IDs des rencontres
+    rencontres = db.query(models.Rencontre).filter(
+        models.Rencontre.phase_id == phase_id,
+        models.Rencontre.evenement_id == evenement_id
+    ).all()
+    rencontre_ids = [r.id for r in rencontres]
+    
+    nb_rencontres = len(rencontres)
+    
+    if rencontre_ids:
+        # 2. Supprimer les résultats
+        nb_resultats = db.query(models.Resultat).filter(
+            models.Resultat.rencontre_id.in_(rencontre_ids)
+        ).delete(synchronize_session=False)
+        
+        # 3. Supprimer les rencontres
+        db.query(models.Rencontre).filter(
+            models.Rencontre.phase_id == phase_id,
+            models.Rencontre.evenement_id == evenement_id
+        ).delete(synchronize_session=False)
+    
+    # 4. Supprimer les poules (SANS supprimer les associations joueurs-poule)
+    poules = db.query(models.Poule).filter(
+        models.Poule.phase_id == phase_id,
+        models.Poule.evenement_id == evenement_id
+    ).all()
+    
+    for poule in poules:
+        # Supprimer les associations joueurs-poule
+        db.execute(
+            models.poule_joueur.delete().where(
+                models.poule_joueur.c.poule_id == poule.id
+            )
+        )
+        # Supprimer la poule
+        db.delete(poule)
+    
+    db.commit()
+    
+    return {
+        "message": "Données de la phase réinitialisées avec succès",
+        "rencontres_supprimees": nb_rencontres,
+        "phase_id": phase_id,
+        "note": "La phase et les joueurs inscrits sont conservés"
+    }
+
 @router.delete("/evenements/{evenement_id}/phases/{phase_id}")
 def remove_phase_from_event(evenement_id: str, phase_id: str, db: Session = Depends(get_db)):
     """Retire une phase d'un événement et supprime toutes les données associées (rencontres, résultats, classements)"""

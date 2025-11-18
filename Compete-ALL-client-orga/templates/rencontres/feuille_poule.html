@@ -460,6 +460,38 @@ const maxPoints = {{ max_points }};
 const phaseId = "{{ phase.id }}";
 const evenementId = "{{ evenement.id }}";
 
+// ===== SYSTÈME DE QUEUE POUR ÉVITER LES ERREURS RÉSEAU =====
+const saveQueue = [];
+let isProcessingQueue = false;
+
+async function processSaveQueue() {
+    if (isProcessingQueue) return;
+    if (saveQueue.length === 0) return;
+    
+    isProcessingQueue = true;
+    console.log(`📦 Traitement de la queue (${saveQueue.length} tâche(s) en attente)`);
+    
+    while (saveQueue.length > 0) {
+        const saveTask = saveQueue.shift();
+        try {
+            console.log(`⏳ Sauvegarde en cours... (${saveQueue.length} restante(s))`);
+            await saveTask(); // On attend que la requête soit terminée avant de passer à la suivante
+            console.log(`✓ Sauvegarde terminée`);
+        } catch (error) {
+            console.error('❌ Erreur lors de la sauvegarde:', error);
+            // On continue quand même avec les autres tâches
+        }
+    }
+    
+    isProcessingQueue = false;
+    console.log('✅ Toutes les sauvegardes terminées');
+}
+
+function addToSaveQueue(saveFunction) {
+    saveQueue.push(saveFunction);
+    processSaveQueue();
+}
+
 // Calculer et afficher la progression
 function updateProgress() {
     const inputs = document.querySelectorAll('.match-cell input');
@@ -747,43 +779,43 @@ async function saveResult(input) {
         applyVisualStyle(opponentInput, input);
     }
     
-    // Enregistrer via la route proxy Flask (évite les problèmes CORS)
-    try {
-        const response = await fetch(`/evenements/${evenementId}/phases/${phaseId}/feuille-poule/save`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                joueur_id: joueurId,
-                adversaire_id: adversaireId,
-                value: value,
-                max_points: maxPoints
-            })
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            console.log('Résultat sauvegardé:', data);
+    // Ajouter la sauvegarde à la queue pour éviter les erreurs réseau
+    addToSaveQueue(async () => {
+        try {
+            const response = await fetch(`/evenements/${evenementId}/phases/${phaseId}/feuille-poule/save`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    joueur_id: joueurId,
+                    adversaire_id: adversaireId,
+                    value: value,
+                    max_points: maxPoints
+                })
+            });
             
-            // Mettre à jour le data-rencontre pour les futures modifications
-            input.dataset.rencontre = data.rencontre_id;
-            
-            showSaveIndicator();
-            updateProgress();
-            
-            // Recharger la page après 1 seconde pour mettre à jour le classement
-            setTimeout(() => {
-                location.reload();
-            }, 1000);
-        } else {
-            const errorData = await response.json();
-            alert('Erreur lors de la sauvegarde: ' + (errorData.detail || 'Erreur inconnue'));
+            if (response.ok) {
+                const data = await response.json();
+                console.log('Résultat sauvegardé:', data);
+                
+                // Mettre à jour le data-rencontre pour les futures modifications
+                input.dataset.rencontre = data.rencontre_id;
+                
+                showSaveIndicator();
+                updateProgress();
+                
+                // Mettre à jour le classement en temps réel sans recharger
+                await updateClassementDisplay();
+            } else {
+                const errorData = await response.json();
+                alert('Erreur lors de la sauvegarde: ' + (errorData.detail || 'Erreur inconnue'));
+            }
+        } catch (error) {
+            console.error('Erreur:', error);
+            throw error; // Propager l'erreur pour que la queue la gère
         }
-    } catch (error) {
-        console.error('Erreur:', error);
-        alert('Erreur réseau: ' + error.message);
-    }
+    });
 }
 
 // Afficher l'indicateur de sauvegarde
@@ -793,6 +825,55 @@ function showSaveIndicator() {
     setTimeout(() => {
         indicator.style.display = 'none';
     }, 2000);
+}
+
+// Mettre à jour le classement en temps réel sans recharger la page
+async function updateClassementDisplay() {
+    try {
+        const response = await fetch(`/evenements/${evenementId}/phases/${phaseId}/classement`);
+        if (!response.ok) return;
+        
+        const classement = await response.json();
+        
+        // Trouver la table du classement
+        const classementTable = document.querySelector('.card tbody');
+        if (!classementTable) return;
+        
+        // Vider et remplir avec les nouvelles données
+        classementTable.innerHTML = '';
+        
+        classement.forEach((entry, index) => {
+            const position = index + 1;
+            let positionText = `${position}e`;
+            if (position === 1) positionText = '🥇 1er';
+            else if (position === 2) positionText = '🥈 2e';
+            else if (position === 3) positionText = '🥉 3e';
+            
+            const vmRatio = entry.rencontres_jouees > 0 
+                ? (entry.victoires / entry.rencontres_jouees).toFixed(3)
+                : '0.000';
+            
+            const indice = entry.touches_donnees - entry.touches_recues;
+            
+            const row = `
+                <tr>
+                    <td style="text-align: center; font-weight: bold;">${positionText}</td>
+                    <td><strong>${entry.username}</strong></td>
+                    <td>${entry.club || '-'}</td>
+                    <td style="text-align: center; font-weight: bold; color: #27ae60;">${entry.victoires}</td>
+                    <td style="text-align: center;">${vmRatio}</td>
+                    <td style="text-align: center;">${entry.rencontres_jouees}</td>
+                    <td style="text-align: center; font-weight: bold; color: #2c3e50;">
+                        ${indice}
+                        <br><small style="color: #7f8c8d;">(${entry.touches_donnees}-${entry.touches_recues})</small>
+                    </td>
+                </tr>
+            `;
+            classementTable.innerHTML += row;
+        });
+    } catch (error) {
+        console.error('Erreur mise à jour classement:', error);
+    }
 }
 
 // Revalider un match après modification

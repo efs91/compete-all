@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from typing import List
 from .. import models, schemas
 from ..database import get_db
@@ -776,113 +776,101 @@ def progresser_vers_phase_suivante(evenement_id: str, phase_id: str, db: Session
         db.commit()
     
     elif db_phase_suivante.type_general == 'elimination' or db_phase_suivante.type_general == 'tableau':
-        # Gestion des tableaux d'élimination directe
+        # === GESTION DES TABLEAUX D'ÉLIMINATION DIRECTE ===
+        # Algorithme: partir de la finale (1 vs 2) et "ouvrir" le bracket
         import math
         
         nb_joueurs = len(joueurs_qualifies)
         
-        # Calculer la puissance de 2 supérieure ou égale au nombre de joueurs
+        # Calculer la puissance de 2 supérieure ou égale
         taille_tableau = 1
         while taille_tableau < nb_joueurs:
             taille_tableau *= 2
         
-        # Calculer le nombre total de tours (log2 de la taille)
         nb_tours = int(math.log2(taille_tableau))
         
-        # Créer un tableau avec les positions (1 à taille_tableau)
-        # Les positions manquantes sont des "byes" (passages automatiques)
-        positions_tableau = [None] * taille_tableau
+        # === ALGORITHME DE GÉNÉRATION DU BRACKET ===
+        def generate_bracket_order(n: int) -> list[int]:
+            """Génère l'ordre des seeds dans le bracket (de haut en bas)"""
+            seeds = [1, 2]  # Finale: 1 vs 2
+            
+            while len(seeds) < n:
+                size = len(seeds)
+                total = 2 * size + 1
+                new_seeds = []
+                
+                for i in range(0, size, 2):
+                    top = seeds[i]
+                    bottom = seeds[i + 1]
+                    
+                    new_seeds.append(top)
+                    new_seeds.append(total - top)
+                    new_seeds.append(total - bottom)
+                    new_seeds.append(bottom)
+                
+                seeds = new_seeds
+            
+            return seeds
         
-        # Placer les joueurs qualifiés selon leur classement (1er = position 0, 2e = position 1, etc.)
+        # Générer l'ordre et créer les paires
+        seeds_order = generate_bracket_order(taille_tableau)
+        paires_bracket = []
+        for i in range(0, len(seeds_order), 2):
+            paires_bracket.append((seeds_order[i], seeds_order[i + 1]))
+        
+        # Créer un dictionnaire : position_bracket (1-based) → joueur ou None
+        places_bracket = {}
+        for i in range(1, taille_tableau + 1):
+            places_bracket[i] = None
+        
+        # Placer les joueurs qualifiés selon leur classement
         for idx, joueur in enumerate(joueurs_qualifies):
-            positions_tableau[idx] = joueur
+            place = idx + 1  # 1-based
+            places_bracket[place] = joueur
         
-        # Créer les matchs du premier tour selon la formule : pos + pos_adverse = taille + 1
-        # Appariements : 1 vs 8, 2 vs 7, 3 vs 6, 4 vs 5 (pour un tableau de 8)
-        matchs_a_creer = []
-        for position in range(taille_tableau // 2):
-            position_haute = position  # 0, 1, 2, 3 (représente 1er, 2e, 3e, 4e)
-            position_basse = taille_tableau - 1 - position  # 7, 6, 5, 4 (représente 8e, 7e, 6e, 5e)
+        # === TOUR 1 : Créer les matchs du premier tour ===
+        joueurs_avec_bye = []
+        
+        for position_match, (place_haute, place_basse) in enumerate(paires_bracket):
+            joueur_haut = places_bracket.get(place_haute)
+            joueur_bas = places_bracket.get(place_basse)
             
-            joueur_haut = positions_tableau[position_haute]
-            joueur_bas = positions_tableau[position_basse]
+            participants = []
+            if joueur_haut:
+                participants.append(joueur_haut['joueur_id'])
+            if joueur_bas:
+                participants.append(joueur_bas['joueur_id'])
             
-            # Si les deux joueurs existent, créer le match
-            if joueur_haut and joueur_bas:
-                matchs_a_creer.append({
-                    'position_match': position,  # Position dans le tour (0, 1, 2, 3...)
-                    'joueur1': joueur_haut,
-                    'joueur2': joueur_bas,
-                    'type': 'match_normal'
-                })
-            elif joueur_haut and not joueur_bas:
-                # Joueur haut a un bye (passe automatiquement au tour suivant)
-                matchs_a_creer.append({
-                    'position_match': position,
-                    'joueur1': joueur_haut,
-                    'joueur2': None,
-                    'type': 'bye'
-                })
-            elif not joueur_haut and joueur_bas:
-                # Joueur bas a un bye (passe automatiquement au tour suivant)
-                matchs_a_creer.append({
-                    'position_match': position,
-                    'joueur1': None,
-                    'joueur2': joueur_bas,
-                    'type': 'bye'
+            # Créer le match
+            rencontre = models.Rencontre(
+                id=str(uuid.uuid4()),
+                phase_id=phase_suivante_id,
+                evenement_id=evenement_id,
+                participants=participants,
+                poule_id=None,
+                tour=1,
+                position=position_match
+            )
+            db.add(rencontre)
+            rencontres_creees += 1
+            
+            # Si bye (un seul participant), noter pour le tour 2
+            if len(participants) == 1:
+                joueurs_avec_bye.append({
+                    'joueur_id': participants[0],
+                    'position_tour1': position_match
                 })
         
-        # Créer TOUS les matchs de TOUS les tours
-        nb_byes = 0
-        joueurs_avec_bye = []  # Joueurs qualifiés d'office pour le tour 2
-        
-        # TOUR 1 : Créer les matchs avec les joueurs réels
-        for match_info in matchs_a_creer:
-            if match_info['type'] == 'match_normal':
-                # Match normal entre deux joueurs
-                rencontre = models.Rencontre(
-                    id=str(uuid.uuid4()),
-                    phase_id=phase_suivante_id,
-                    evenement_id=evenement_id,
-                    participants=[match_info['joueur1']['joueur_id'], match_info['joueur2']['joueur_id']],
-                    poule_id=None,
-                    tour=1,
-                    position=match_info['position_match']
-                )
-                db.add(rencontre)
-                rencontres_creees += 1
-            else:
-                # Bye : créer un match avec un seul participant et marquer comme qualifié
-                joueur_qualifie = match_info['joueur1'] if match_info['joueur1'] else match_info['joueur2']
-                if joueur_qualifie:
-                    rencontre = models.Rencontre(
-                        id=str(uuid.uuid4()),
-                        phase_id=phase_suivante_id,
-                        evenement_id=evenement_id,
-                        participants=[joueur_qualifie['joueur_id']],  # Un seul participant
-                        poule_id=None,
-                        tour=1,
-                        position=match_info['position_match']
-                    )
-                    db.add(rencontre)
-                    rencontres_creees += 1
-                    joueurs_avec_bye.append({
-                        'joueur_id': joueur_qualifie['joueur_id'],
-                        'position_tour1': match_info['position_match']
-                    })
-                    nb_byes += 1
-        
-        # TOURS 2 à N : Créer tous les matchs avec participants vides
+        # === TOURS 2 à N : Créer tous les matchs vides ===
         for tour_num in range(2, nb_tours + 1):
             nb_matchs_ce_tour = taille_tableau // (2 ** tour_num)
             
             for position in range(nb_matchs_ce_tour):
-                # Créer un match vide (participants seront ajoutés lors de la saisie des résultats)
                 rencontre = models.Rencontre(
                     id=str(uuid.uuid4()),
                     phase_id=phase_suivante_id,
                     evenement_id=evenement_id,
-                    participants=[],  # Vide pour l'instant
+                    participants=[],
                     poule_id=None,
                     tour=tour_num,
                     position=position
@@ -892,11 +880,14 @@ def progresser_vers_phase_suivante(evenement_id: str, phase_id: str, db: Session
         
         db.commit()
         
-        # Pré-remplir le tour 2 avec les joueurs ayant un bye
+        # === PRÉ-REMPLIR TOUR 2 avec les byes ===
         if joueurs_avec_bye:
+            from sqlalchemy.orm.attributes import flag_modified
+            
             for joueur_bye in joueurs_avec_bye:
-                # Trouver le match du tour 2 correspondant
                 position_tour2 = joueur_bye['position_tour1'] // 2
+                position_dans_match = joueur_bye['position_tour1'] % 2  # 0 = haut, 1 = bas
+                
                 match_tour2 = db.query(models.Rencontre).filter(
                     models.Rencontre.phase_id == phase_suivante_id,
                     models.Rencontre.tour == 2,
@@ -904,13 +895,25 @@ def progresser_vers_phase_suivante(evenement_id: str, phase_id: str, db: Session
                 ).first()
                 
                 if match_tour2:
-                    # Ajouter le joueur dans le match du tour 2
-                    if not match_tour2.participants:
-                        match_tour2.participants = []
-                    match_tour2.participants.append(joueur_bye['joueur_id'])
+                    # Créer une liste avec 2 positions [None, None]
+                    participants_actuels = match_tour2.participants if match_tour2.participants else []
+                    nouveaux_participants = [None, None]
+                    
+                    # Copier les participants existants
+                    for i, p in enumerate(participants_actuels):
+                        if i < 2:
+                            nouveaux_participants[i] = p
+                    
+                    # Placer le joueur bye à la BONNE position (0 ou 1)
+                    nouveaux_participants[position_dans_match] = joueur_bye['joueur_id']
+                    
+                    match_tour2.participants = nouveaux_participants
+                    flag_modified(match_tour2, 'participants')
                     db.add(match_tour2)
             
             db.commit()
+        
+        nb_byes = len(joueurs_avec_bye)
         
         return {
             "message": "Progression vers la phase suivante réussie (tableau d'élimination complet créé)",
@@ -1131,4 +1134,281 @@ def generate_next_round(evenement_id: str, phase_id: str, current_tour: int, db:
         "tour_suivant": tour_suivant,
         "nb_gagnants": len(gagnants),
         "rencontres_creees": rencontres_creees
+    }
+
+@router.get("/{evenement_id}/phases/{phase_id}/classement")
+def get_classement_phase(evenement_id: str, phase_id: str, db: Session = Depends(get_db)):
+    """Récupère le classement d'une phase en temps réel"""
+    
+    # Vérifier que la phase existe
+    db_phase = db.query(models.Phase).filter(models.Phase.id == phase_id).first()
+    if not db_phase:
+        raise HTTPException(status_code=404, detail="Phase non trouvée")
+    
+    # Récupérer tous les joueurs de la phase
+    joueurs_inscrits = db.execute(
+        select(models.phase_evenement_joueur).where(
+            models.phase_evenement_joueur.c.phase_id == phase_id,
+            models.phase_evenement_joueur.c.evenement_id == evenement_id
+        )
+    ).all()
+    
+    if not joueurs_inscrits:
+        return []
+    
+    # Initialiser le classement
+    classement = {}
+    for inscription in joueurs_inscrits:
+        joueur_id = inscription.joueur_id
+        joueur = db.query(models.Joueur).filter(models.Joueur.id == joueur_id).first()
+        
+        classement[joueur_id] = {
+            'joueur_id': joueur_id,
+            'username': joueur.username if joueur else 'Inconnu',
+            'club': joueur.club if joueur else None,
+            'victoires': 0,
+            'rencontres_jouees': 0,
+            'touches_donnees': 0,
+            'touches_recues': 0
+        }
+    
+    # Récupérer toutes les rencontres de cette phase
+    rencontres = db.query(models.Rencontre).filter(
+        models.Rencontre.phase_id == phase_id,
+        models.Rencontre.evenement_id == evenement_id
+    ).all()
+    
+    # Calculer les statistiques pour chaque joueur
+    for rencontre in rencontres:
+        resultats = db.query(models.Resultat).filter(
+            models.Resultat.rencontre_id == rencontre.id
+        ).all()
+        
+        if len(resultats) == 2:
+            r1, r2 = resultats[0], resultats[1]
+            
+            # Joueur 1
+            if r1.joueur_id in classement:
+                classement[r1.joueur_id]['rencontres_jouees'] += 1
+                classement[r1.joueur_id]['touches_donnees'] += r1.score or 0
+                classement[r1.joueur_id]['touches_recues'] += r2.score or 0
+                if (r1.score or 0) > (r2.score or 0):
+                    classement[r1.joueur_id]['victoires'] += 1
+            
+            # Joueur 2
+            if r2.joueur_id in classement:
+                classement[r2.joueur_id]['rencontres_jouees'] += 1
+                classement[r2.joueur_id]['touches_donnees'] += r2.score or 0
+                classement[r2.joueur_id]['touches_recues'] += r1.score or 0
+                if (r2.score or 0) > (r1.score or 0):
+                    classement[r2.joueur_id]['victoires'] += 1
+    
+    # Trier par victoires, puis indice, puis touches données
+    classement_list = sorted(
+        classement.values(),
+        key=lambda x: (
+            -x['victoires'],
+            -(x['touches_donnees'] - x['touches_recues']),
+            -x['touches_donnees']
+        )
+    )
+    
+    return classement_list
+
+
+@router.get("/{evenement_id}/classement-final")
+def get_classement_final_evenement(evenement_id: str, db: Session = Depends(get_db)):
+    """Récupère le classement final de l'événement
+    
+    Retourne:
+    - classement: liste des joueurs classés
+    - est_definitif: True si la finale a été jouée, False sinon
+    - phase_finale: informations sur la dernière phase
+    """
+    
+    # Vérifier que l'événement existe
+    db_evenement = db.query(models.Evenement).filter(models.Evenement.id == evenement_id).first()
+    if not db_evenement:
+        raise HTTPException(status_code=404, detail="Événement non trouvé")
+    
+    # Récupérer toutes les phases de l'événement, triées par ordre
+    phase_event_relations = db.execute(
+        select(models.phase_evenement).where(
+            models.phase_evenement.c.evenement_id == evenement_id
+        ).order_by(models.phase_evenement.c.ordre)
+    ).all()
+    
+    if not phase_event_relations:
+        return {
+            "classement": [],
+            "est_definitif": False,
+            "phase_finale": None,
+            "message": "Aucune phase configurée"
+        }
+    
+    # Récupérer la dernière phase
+    derniere_relation = phase_event_relations[-1]
+    derniere_phase = db.query(models.Phase).filter(
+        models.Phase.id == derniere_relation.phase_id
+    ).first()
+    
+    if not derniere_phase:
+        return {
+            "classement": [],
+            "est_definitif": False,
+            "phase_finale": None,
+            "message": "Phase finale non trouvée"
+        }
+    
+    type_general = derniere_phase.type_general or ""
+    
+    # Récupérer les joueurs de la dernière phase
+    joueurs_inscrits = db.execute(
+        select(models.phase_evenement_joueur).where(
+            models.phase_evenement_joueur.c.phase_id == derniere_phase.id,
+            models.phase_evenement_joueur.c.evenement_id == evenement_id
+        )
+    ).all()
+    
+    classement = []
+    est_definitif = False
+    
+    # Si c'est un tableau d'élimination directe
+    if 'elimination' in type_general.lower() or 'bracket' in type_general.lower():
+        # Récupérer toutes les rencontres du tableau
+        rencontres = db.query(models.Rencontre).filter(
+            models.Rencontre.phase_id == derniere_phase.id,
+            models.Rencontre.evenement_id == evenement_id
+        ).all()
+        
+        if rencontres:
+            # Trouver le tour maximum (finale)
+            max_tour = max([r.tour for r in rencontres], default=1)
+            
+            # Chercher la finale avec des résultats
+            finale = None
+            for rencontre in rencontres:
+                if rencontre.tour == max_tour:
+                    resultats = db.query(models.Resultat).filter(
+                        models.Resultat.rencontre_id == rencontre.id
+                    ).all()
+                    
+                    if len(resultats) >= 2:
+                        finale = rencontre
+                        break
+            
+            # Si la finale est jouée avec un résultat décisif
+            if finale:
+                resultats_finale = db.query(models.Resultat).filter(
+                    models.Resultat.rencontre_id == finale.id
+                ).all()
+                
+                if len(resultats_finale) >= 2:
+                    points_r1 = resultats_finale[0].points or 0
+                    points_r2 = resultats_finale[1].points or 0
+                    
+                    # Finale décisive = classement définitif
+                    if points_r1 != points_r2:
+                        est_definitif = True
+                        
+                        # Initialiser le classement avec tous les joueurs du tableau
+                        joueurs_classement = {}
+                        for inscription in joueurs_inscrits:
+                            joueur = db.query(models.Joueur).filter(
+                                models.Joueur.id == inscription.joueur_id
+                            ).first()
+                            
+                            joueurs_classement[inscription.joueur_id] = {
+                                'joueur_id': inscription.joueur_id,
+                                'username': joueur.username if joueur else 'Inconnu',
+                                'club': joueur.club if joueur else None,
+                                'tour_sortie': 0,
+                                'est_vainqueur': False,
+                                'seed': inscription.seed or 999
+                            }
+                        
+                        # Analyser chaque rencontre pour déterminer les éliminés
+                        for rencontre in rencontres:
+                            resultats = db.query(models.Resultat).filter(
+                                models.Resultat.rencontre_id == rencontre.id
+                            ).all()
+                            
+                            if len(resultats) >= 2:
+                                r1, r2 = resultats[0], resultats[1]
+                                points_r1 = r1.points or 0
+                                points_r2 = r2.points or 0
+                                tour = rencontre.tour
+                                
+                                # Le perdant est éliminé à ce tour
+                                if points_r1 > points_r2:
+                                    # r2 perd
+                                    if r2.participant_id in joueurs_classement:
+                                        if joueurs_classement[r2.participant_id]['tour_sortie'] == 0:
+                                            joueurs_classement[r2.participant_id]['tour_sortie'] = tour
+                                    # Si c'est la finale, r1 est le vainqueur
+                                    if tour == max_tour and r1.participant_id in joueurs_classement:
+                                        joueurs_classement[r1.participant_id]['est_vainqueur'] = True
+                                elif points_r2 > points_r1:
+                                    # r1 perd
+                                    if r1.participant_id in joueurs_classement:
+                                        if joueurs_classement[r1.participant_id]['tour_sortie'] == 0:
+                                            joueurs_classement[r1.participant_id]['tour_sortie'] = tour
+                                    # Si c'est la finale, r2 est le vainqueur
+                                    if tour == max_tour and r2.participant_id in joueurs_classement:
+                                        joueurs_classement[r2.participant_id]['est_vainqueur'] = True
+                        
+                        # Construire le classement final
+                        # 1. Le vainqueur est 1er
+                        vainqueur = [j for j in joueurs_classement.values() if j['est_vainqueur']]
+                        if vainqueur:
+                            vainqueur[0]['position'] = 1
+                            classement.append(vainqueur[0])
+                        
+                        # 2. Le perdant de la finale est 2ème
+                        perdant_finale = [j for j in joueurs_classement.values() 
+                                        if j['tour_sortie'] == max_tour and not j['est_vainqueur']]
+                        if perdant_finale:
+                            perdant_finale[0]['position'] = 2
+                            classement.append(perdant_finale[0])
+                        
+                        # 3. Pour chaque tour, classer les perdants
+                        for tour in range(max_tour - 1, 0, -1):
+                            perdants_tour = [j for j in joueurs_classement.values() 
+                                           if j['tour_sortie'] == tour]
+                            
+                            if perdants_tour:
+                                # Trier par seed (meilleur seed = meilleure position)
+                                perdants_tour.sort(key=lambda x: x['seed'])
+                                
+                                # Calculer la position de départ
+                                position_debut = 2 ** (max_tour - tour + 1) + 1
+                                
+                                for idx, joueur in enumerate(perdants_tour):
+                                    joueur['position'] = position_debut + idx
+                                    classement.append(joueur)
+                        
+                        # 4. Les joueurs pas encore éliminés
+                        non_elimines = [j for j in joueurs_classement.values() 
+                                      if j['tour_sortie'] == 0 and not j['est_vainqueur']]
+                        if non_elimines:
+                            non_elimines.sort(key=lambda x: x['seed'])
+                            position_suivante = len(classement) + 1
+                            for joueur in non_elimines:
+                                joueur['position'] = position_suivante
+                                classement.append(joueur)
+                                position_suivante += 1
+    
+    # Si pas de classement définitif, utiliser le classement provisoire de la dernière phase
+    if not classement:
+        # Utiliser l'endpoint existant pour le classement provisoire
+        classement = get_classement_phase(evenement_id, derniere_phase.id, db)
+    
+    return {
+        "classement": classement,
+        "est_definitif": est_definitif,
+        "phase_finale": {
+            "id": derniere_phase.id,
+            "nom": derniere_phase.nom,
+            "type_general": derniere_phase.type_general
+        }
     } 

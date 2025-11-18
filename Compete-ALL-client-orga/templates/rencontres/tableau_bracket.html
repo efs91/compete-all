@@ -99,6 +99,16 @@
         font-size: 0.85em;
     }
     
+    /* Animation pour les mises à jour en temps réel */
+    .match-line.updated {
+        animation: highlight 2s ease-in-out;
+    }
+    
+    @keyframes highlight {
+        0%, 100% { background-color: transparent; }
+        50% { background-color: #ffffcc; }
+    }
+    
     /* Lignes de connexion simples */
     .bracket-match::before {
         content: '';
@@ -158,6 +168,13 @@
 <div class="card">
     <h2>🏆 Tableau - {{ phase.nom }}</h2>
     <p><strong>{{ evenement.nom }}</strong> | Tableau de {{ taille_tableau }} | {{ nb_tours }} tours</p>
+    
+    <!-- DEBUG -->
+    <details style="margin-top: 10px; background: #f0f0f0; padding: 10px;">
+        <summary>🐛 Debug Info</summary>
+        <pre style="font-size: 0.8em; overflow: auto;">{{ rencontres_par_tour|tojson(indent=2) }}</pre>
+    </details>
+    
     <div style="margin-top: 10px; display: flex; gap: 10px;">
         <a href="{{ url_for('view_rencontres', evenement_id=evenement.id, phase_id=phase.id) }}" class="btn btn-secondary btn-small">← Retour</a>
     </div>
@@ -174,55 +191,109 @@
             {% set nb_matchs_attendus = (taille_tableau // (2 ** tour_num))|int %}
             
             {% for i in range(nb_matchs_attendus) %}
-                {% set match = matchs_du_tour[i] if i < matchs_du_tour|length else None %}
+                {% set match = matchs_du_tour|selectattr('position', 'equalto', i)|first if matchs_du_tour else None %}
                 
                 {% if match %}
                     <div class="bracket-match" data-match-id="{{ match.id }}">
-                        {% if match.participants and match.participants|length == 2 %}
-                            {% for participant_id in match.participants %}
-                                {% set joueur_data = joueurs_dict.get(participant_id) %}
-                                {% set resultat = match.resultats|selectattr('participant_id', 'equalto', participant_id)|first if match.resultats else None %}
-                                
-                                <div class="match-line {% if resultat and resultat.classement == 1 %}winner{% endif %}">
+                        {% if match.participants and match.participants|length >= 1 %}
+                            {% set participants_valides = match.participants|select|list %}
+                            
+                            {% if participants_valides|length == 2 %}
+                                {# Deux participants : match normal #}
+                                {% for participant_id in participants_valides %}
+                                    {% set joueur_data = joueurs_dict.get(participant_id) %}
+                                    {% set resultat = match.resultats|selectattr('participant_id', 'equalto', participant_id)|first if match.resultats else None %}
+                                    
+                                    <div class="match-line {% if resultat and resultat.classement == 1 %}winner{% endif %}" data-participant-id="{{ participant_id }}">
+                                        <span class="player-name">
+                                            {{ joueur_data.username if joueur_data else 'Inconnu' }}
+                                            {% if joueur_data and joueur_data.club %}
+                                                <span class="player-club">: {{ joueur_data.club }}</span>
+                                            {% endif %}
+                                        </span>
+                                        <input type="text" 
+                                               class="score-input" 
+                                               data-match-id="{{ match.id }}"
+                                               data-participant-id="{{ participant_id }}"
+                                               value="{{ resultat.points if resultat else '' }}"
+                                               placeholder="-"
+                                               maxlength="3"
+                                               pattern="[0-9]*"
+                                               onchange="saveScore(this)">
+                                    </div>
+                                {% endfor %}
+                            
+                            {% elif participants_valides|length == 1 %}
+                                {# Un seul participant : bye #}
+                                {% set joueur_data = joueurs_dict.get(participants_valides[0]) %}
+                                <div class="match-line" data-participant-id="{{ participants_valides[0] }}">
                                     <span class="player-name">
                                         {{ joueur_data.username if joueur_data else 'Inconnu' }}
                                         {% if joueur_data and joueur_data.club %}
                                             <span class="player-club">: {{ joueur_data.club }}</span>
                                         {% endif %}
                                     </span>
+                                    <span class="qualified-tag">QUAL</span>
+                                </div>
+                                <div class="match-line bye" data-participant-id="">
+                                    --- Bye ---
+                                </div>
+                            {% else %}
+                                {# Aucun participant ou participants en attente #}
+                                <div class="match-line">
+                                    <span class="player-name">TBD</span>
                                     <input type="text" 
                                            class="score-input" 
                                            data-match-id="{{ match.id }}"
-                                           data-participant-id="{{ participant_id }}"
-                                           value="{{ resultat.points if resultat else '' }}"
+                                           data-participant-id=""
+                                           value=""
                                            placeholder="-"
                                            maxlength="3"
                                            pattern="[0-9]*"
-                                           onchange="saveScore(this)">
+                                           disabled
+                                           title="En attente des participants">
                                 </div>
-                            {% endfor %}
-                            
-                        {% elif match.participants and match.participants|length == 1 %}
-                            {% set joueur_data = joueurs_dict.get(match.participants[0]) %}
-                            <div class="match-line">
-                                <span class="player-name">
-                                    {{ joueur_data.username if joueur_data else 'Inconnu' }}
-                                    {% if joueur_data and joueur_data.club %}
-                                        <span class="player-club">: {{ joueur_data.club }}</span>
-                                    {% endif %}
-                                </span>
-                                <span class="qualified-tag">QUAL</span>
-                            </div>
-                            <div class="match-line bye">
-                                --- Bye ---
-                            </div>
+                                <div class="match-line">
+                                    <span class="player-name">TBD</span>
+                                    <input type="text" 
+                                           class="score-input" 
+                                           data-match-id="{{ match.id }}"
+                                           data-participant-id=""
+                                           value=""
+                                           placeholder="-"
+                                           maxlength="3"
+                                           pattern="[0-9]*"
+                                           disabled
+                                           title="En attente des participants">
+                                </div>
+                            {% endif %}
                         {% else %}
-                            <!-- Match avec participants vides (tours futurs) -->
+                            {# Pas de participants du tout #}
                             <div class="match-line">
                                 <span class="player-name">TBD</span>
+                                <input type="text" 
+                                       class="score-input" 
+                                       data-match-id="{{ match.id }}"
+                                       data-participant-id=""
+                                       value=""
+                                       placeholder="-"
+                                       maxlength="3"
+                                       pattern="[0-9]*"
+                                       disabled
+                                       title="En attente des participants">
                             </div>
                             <div class="match-line">
                                 <span class="player-name">TBD</span>
+                                <input type="text" 
+                                       class="score-input" 
+                                       data-match-id="{{ match.id }}"
+                                       data-participant-id=""
+                                       value=""
+                                       placeholder="-"
+                                       maxlength="3"
+                                       pattern="[0-9]*"
+                                       disabled
+                                       title="En attente des participants">
                             </div>
                         {% endif %}
                         
@@ -245,6 +316,39 @@ const SCORE_MAX = 99; // Score maximum par défaut (à terme, lire de la config)
 const NB_TOURS = {{ nb_tours }};
 const EVENEMENT_ID = '{{ evenement.id }}';
 const PHASE_ID = '{{ phase.id }}';
+
+// ===== SYSTÈME DE QUEUE POUR ÉVITER LES ERREURS RÉSEAU =====
+const saveQueue = [];
+let isProcessingQueue = false;
+
+async function processSaveQueue() {
+    if (isProcessingQueue) return;
+    if (saveQueue.length === 0) return;
+    
+    isProcessingQueue = true;
+    console.log(`📦 Traitement de la queue (${saveQueue.length} tâche(s) en attente)`);
+    
+    while (saveQueue.length > 0) {
+        const saveTask = saveQueue.shift();
+        try {
+            console.log(`⏳ Sauvegarde en cours... (${saveQueue.length} restante(s))`);
+            await saveTask(); // On attend que la requête soit terminée avant de passer à la suivante
+            console.log(`✓ Sauvegarde terminée`);
+        } catch (error) {
+            console.error('❌ Erreur lors de la sauvegarde:', error);
+            // On continue quand même avec les autres tâches
+        }
+    }
+    
+    isProcessingQueue = false;
+    console.log('✅ Toutes les sauvegardes terminées');
+}
+
+function addToSaveQueue(saveFunction) {
+    saveQueue.push(saveFunction);
+    console.log(`➕ Ajout à la queue (taille: ${saveQueue.length})`);
+    processSaveQueue();
+}
 
 function saveScore(input) {
     const matchId = input.dataset.matchId;
@@ -297,30 +401,239 @@ function saveScore(input) {
         actions: {}
     }));
     
-    // Envoyer au serveur
-    fetch(`/api/rencontres/${matchId}/resultats`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resultats: resultats })
-    })
-    .then(response => response.json())
-    .then(data => {
-        // Mettre à jour l'affichage
-        matchInputs.forEach(inp => {
-            const line = inp.closest('.match-line');
-            const isWinner = resultats.find(r => r.participant_id === inp.dataset.participantId).classement === 1;
-            line.classList.toggle('winner', isWinner);
+    // Ajouter la sauvegarde à la queue pour éviter les erreurs réseau
+    addToSaveQueue(async () => {
+        try {
+            const response = await fetch(`/api/rencontres/${matchId}/resultats`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ resultats: resultats })
+            });
+            
+            if (!response.ok) {
+                throw new Error('Erreur serveur');
+            }
+            
+            const data = await response.json();
+            
+            // Mettre à jour l'affichage local du gagnant
+            matchInputs.forEach(inp => {
+                const line = inp.closest('.match-line');
+                const isWinner = resultats.find(r => r.participant_id === inp.dataset.participantId).classement === 1;
+                line.classList.toggle('winner', isWinner);
+            });
+            
+            console.log('Score sauvegardé, mise à jour de l\'affichage...');
+            
+            // Récupérer les infos du match pour calculer le prochain
+            const matchResponse = await fetch(`/api/rencontres/${matchId}`);
+            if (matchResponse.ok) {
+                const matchData = await matchResponse.json();
+                await updateNextRoundDisplay(matchData, resultats);
+            }
+            
+        } catch (error) {
+            console.error('Erreur:', error);
+            throw error; // Propager l'erreur pour que la queue la gère
+        }
+    });
+}
+
+// Mettre à jour l'affichage du gagnant dans le tour suivant sans recharger
+async function updateNextRoundDisplay(matchData, resultats) {
+    try {
+        // Calculer la position et le tour suivant (même logique que le backend)
+        const currentPosition = matchData.position;
+        const currentTour = matchData.tour;
+        const nextPosition = Math.floor(currentPosition / 2);
+        const nextTour = currentTour + 1;
+        
+        console.log(`📊 Match terminé - Tour ${currentTour}, Position ${currentPosition}`);
+        console.log(`➡️ Calcul: Tour suivant ${nextTour}, Position ${nextPosition}`);
+        
+        // Vérifier qu'on n'est pas à la finale
+        if (nextTour > NB_TOURS) {
+            console.log('🏆 C\'est la finale, pas de tour suivant');
+            return;
+        }
+        
+        // Trouver le gagnant
+        const winner = resultats.find(r => r.classement === 1);
+        if (!winner) {
+            console.log('⚠️ Aucun gagnant trouvé');
+            return;
+        }
+        
+        // Récupérer le nom du gagnant depuis l'affichage actuel
+        const currentMatchLines = document.querySelectorAll(`[data-match-id="${matchData.id}"] .match-line`);
+        let winnerName = '';
+        currentMatchLines.forEach(line => {
+            const input = line.querySelector(`input[data-participant-id="${winner.participant_id}"]`);
+            if (input) {
+                const nameSpan = line.querySelector('.player-name');
+                if (nameSpan) {
+                    // Extraire juste le nom sans le club
+                    const fullText = nameSpan.textContent;
+                    winnerName = fullText.split(':')[0].trim();
+                }
+            }
         });
         
-        console.log('Score sauvegardé');
+        if (!winnerName) {
+            console.log('⚠️ Nom du gagnant non trouvé');
+            return;
+        }
         
-        // Recharger la page pour afficher le gagnant dans le tour suivant
-        setTimeout(() => location.reload(), 500);
-    })
-    .catch(error => {
-        console.error('Erreur:', error);
-        alert('Erreur lors de la sauvegarde');
-    });
+        console.log(`👤 Gagnant: ${winnerName}`);
+        
+        // Trouver le bon match du tour suivant
+        const bracketRounds = document.querySelectorAll('.bracket-round');
+        console.log(`🔍 Nombre de tours disponibles: ${bracketRounds.length}`);
+        
+        if (nextTour - 1 < bracketRounds.length) {
+            const nextRoundDiv = bracketRounds[nextTour - 1]; // -1 car index 0
+            const matchesInNextRound = nextRoundDiv.querySelectorAll('.bracket-match');
+            console.log(`🔍 Matchs dans tour ${nextTour}: ${matchesInNextRound.length}`);
+            
+            if (nextPosition < matchesInNextRound.length) {
+                const nextMatchDiv = matchesInNextRound[nextPosition];
+                const matchLines = nextMatchDiv.querySelectorAll('.match-line');
+                
+                // Déterminer dans quelle ligne mettre le gagnant (position dans le match)
+                const positionInNextMatch = currentPosition % 2;
+                console.log(`📍 Position dans le match suivant: ${positionInNextMatch} (0=haut, 1=bas)`);
+                
+                // Détection des lignes avec QUAL et bye
+                const linesWithQual = Array.from(matchLines).filter(l => l.querySelector('.qualified-tag'));
+                const linesBye = Array.from(matchLines).filter(l => l.classList.contains('bye'));
+                
+                console.log(`📊 Lignes: ${linesWithQual.length} QUAL, ${linesBye.length} bye`);
+                
+                // Si on a des lignes QUAL, il faut les transformer en lignes normales
+                if (linesWithQual.length > 0) {
+                    console.log('🔄 Transformation des lignes QUAL en lignes de match normales');
+                    
+                    // Transformer chaque ligne QUAL
+                    linesWithQual.forEach(line => {
+                        const qualTag = line.querySelector('.qualified-tag');
+                        if (qualTag) qualTag.remove();
+                        
+                        // Récupérer le participant_id de la ligne
+                        const participantId = line.getAttribute('data-participant-id') || '';
+                        
+                        // Ajouter un input si pas déjà présent
+                        if (!line.querySelector('.score-input')) {
+                            const input = document.createElement('input');
+                            input.type = 'text';
+                            input.className = 'score-input';
+                            input.setAttribute('data-match-id', nextMatchDiv.dataset.matchId);
+                            input.setAttribute('data-participant-id', participantId);
+                            input.placeholder = '-';
+                            input.maxLength = 3;
+                            input.pattern = '[0-9]*';
+                            input.onchange = function() { saveScore(this); };
+                            line.appendChild(input);
+                            console.log(`✓ Input ajouté avec participant_id: ${participantId}`);
+                        }
+                    });
+                    
+                    // Transformer les lignes bye en lignes normales
+                    linesBye.forEach(byeLine => {
+                        byeLine.classList.remove('bye');
+                        byeLine.innerHTML = `
+                            <span class="player-name">${winnerName}</span>
+                            <input type="text" 
+                                   class="score-input" 
+                                   data-match-id="${nextMatchDiv.dataset.matchId}"
+                                   data-participant-id="${winner.participant_id}"
+                                   value=""
+                                   placeholder="-"
+                                   maxlength="3"
+                                   pattern="[0-9]*"
+                                   onchange="saveScore(this)">
+                        `;
+                        byeLine.classList.add('updated');
+                        setTimeout(() => byeLine.classList.remove('updated'), 2000);
+                    });
+                    
+                    console.log(`✅ Match transformé en match normal`);
+                    return; // Sortir ici
+                }
+                
+                // Match normal sans QUAL, utiliser la position calculée
+                let targetLine = matchLines[positionInNextMatch];
+                
+                if (targetLine) {
+                    console.log('🔍 Structure de la ligne:', targetLine.innerHTML.trim().substring(0, 100));
+                    
+                    // Vérifier si c'est une ligne "bye"
+                    if (targetLine.classList.contains('bye')) {
+                        console.log('� Remplacement de la ligne bye par le match normal');
+                        // Remplacer toute la ligne bye par une ligne de match normale
+                        targetLine.classList.remove('bye');
+                        targetLine.innerHTML = `
+                            <span class="player-name">${winnerName}</span>
+                            <input type="text" 
+                                   class="score-input" 
+                                   data-match-id="${nextMatchDiv.dataset.matchId}"
+                                   data-participant-id="${winner.participant_id}"
+                                   value=""
+                                   placeholder="-"
+                                   maxlength="3"
+                                   pattern="[0-9]*"
+                                   onchange="saveScore(this)">
+                        `;
+                        targetLine.classList.add('updated');
+                        setTimeout(() => targetLine.classList.remove('updated'), 2000);
+                        console.log(`✅ Ligne bye remplacée par "${winnerName}"`);
+                    } else {
+                        // Ligne normale (TBD ou ancien participant)
+                        let nameSpan = targetLine.querySelector('.player-name');
+                        let scoreInput = targetLine.querySelector('.score-input');
+                        
+                        if (nameSpan) {
+                            const oldText = nameSpan.textContent.trim();
+                            console.log(`📝 Ancien texte: "${oldText}"`);
+                            
+                            // Remplacer le nom
+                            const clubSpan = nameSpan.querySelector('.player-club');
+                            if (clubSpan) {
+                                nameSpan.childNodes[0].textContent = winnerName + ' ';
+                            } else {
+                                nameSpan.textContent = winnerName;
+                            }
+                            
+                            // Mettre à jour l'input (activer si désactivé, mettre le participant_id)
+                            if (scoreInput) {
+                                if (scoreInput.disabled) {
+                                    scoreInput.disabled = false;
+                                    scoreInput.removeAttribute('title');
+                                    console.log('✓ Input activé pour', winnerName);
+                                }
+                                // TOUJOURS mettre à jour le participant_id
+                                scoreInput.setAttribute('data-participant-id', winner.participant_id);
+                                console.log('✓ participant_id mis à jour:', winner.participant_id);
+                            }
+                            
+                            targetLine.classList.add('updated');
+                            setTimeout(() => targetLine.classList.remove('updated'), 2000);
+                            console.log(`✅ Gagnant "${winnerName}" affiché`);
+                        } else {
+                            console.log('⚠️ Aucun span .player-name trouvé');
+                        }
+                    }
+                } else {
+                    console.log(`⚠️ Ligne cible non trouvée`);
+                }
+            } else {
+                console.log(`⚠️ Position ${nextPosition} hors limites (max: ${matchesInNextRound.length})`);
+            }
+        } else {
+            console.log(`⚠️ Tour ${nextTour} non disponible`);
+        }
+    } catch (error) {
+        console.error('❌ Erreur mise à jour tour suivant:', error);
+    }
 }
 </script>
 

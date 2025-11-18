@@ -116,6 +116,94 @@
     {% endif %}
 </div>
 
+<!-- Classement final de l'événement -->
+{% if classement_final and classement_final.classement and classement_final.classement|length > 0 %}
+<div class="card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <h2 style="color: white; margin: 0;">
+            🏆 Classement de l'Événement
+        </h2>
+        {% if classement_final.est_definitif %}
+        <span style="background: #27ae60; padding: 8px 15px; border-radius: 20px; font-weight: bold; font-size: 0.9em;">
+            ✓ DÉFINITIF
+        </span>
+        {% else %}
+        <span style="background: #f39c12; padding: 8px 15px; border-radius: 20px; font-weight: bold; font-size: 0.9em;">
+            ⏳ PROVISOIRE
+        </span>
+        {% endif %}
+    </div>
+    
+    <div style="background: white; border-radius: 8px; padding: 20px; color: #2c3e50;">
+        <table style="margin: 0;">
+            <thead>
+                <tr>
+                    <th style="width: 80px; color: #2c3e50;">Position</th>
+                    <th style="color: #2c3e50;">Joueur</th>
+                    <th style="color: #2c3e50;">Club</th>
+                    <th style="color: #2c3e50;">Résultat</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in classement_final.classement[:10] %}
+                <tr {% if (entry.position and entry.position <= 3) or loop.index <= 3 %}style="background: #fffbea;"{% endif %}>
+                    <td style="text-align: center; font-weight: bold; font-size: 1.2em; color: #2c3e50;">
+                        {% if entry.position and entry.position == 1 %}
+                            <span style="font-size: 1.8em;">🥇</span> 1er
+                        {% elif entry.position and entry.position == 2 %}
+                            <span style="font-size: 1.8em;">🥈</span> 2ème
+                        {% elif entry.position and entry.position == 3 %}
+                            <span style="font-size: 1.6em;">🥉</span> 3ème
+                        {% elif entry.position %}
+                            {{ entry.position }}ème
+                        {% elif loop.index == 1 %}
+                            <span style="font-size: 1.8em;">🥇</span> 1er
+                        {% elif loop.index == 2 %}
+                            <span style="font-size: 1.8em;">🥈</span> 2ème
+                        {% elif loop.index == 3 %}
+                            <span style="font-size: 1.6em;">🥉</span> 3ème
+                        {% else %}
+                            {{ loop.index }}ème
+                        {% endif %}
+                    </td>
+                    <td style="color: #2c3e50;"><strong>{{ entry.username }}</strong></td>
+                    <td style="color: #2c3e50;">{{ entry.club if entry.club else '-' }}</td>
+                    <td style="color: #2c3e50; font-size: 0.9em;">
+                        {% if classement_final.phase_finale %}
+                            <strong>{{ classement_final.phase_finale.nom }}</strong>
+                            {% if classement_final.est_definitif %}
+                                {% if entry.position == 1 %}
+                                    : Vainqueur
+                                {% elif entry.position == 2 %}
+                                    : Finaliste
+                                {% elif entry.position == 3 %}
+                                    : Demi-finaliste
+                                {% elif entry.tour_sortie %}
+                                    : Éliminé au {{ ['', 'finale', 'demi', 'quart', '8ème', '16ème', '32ème'][entry.tour_sortie] if entry.tour_sortie <= 6 else 'tour ' ~ entry.tour_sortie }}
+                                {% endif %}
+                            {% else %}
+                                : V/M={{ "%.2f"|format(entry.vm) if entry.vm is defined else '0' }}
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% if classement_final.classement|length > 10 %}
+        <p style="text-align: center; color: #7f8c8d; margin-top: 15px; font-size: 0.9em;">
+            ... et {{ classement_final.classement|length - 10 }} autre(s) joueur(s)
+        </p>
+        {% endif %}
+        <div style="text-align: center; margin-top: 15px;">
+            <a href="{{ url_for('view_classements', evenement_id=evenement.id) }}" class="btn" style="background: #667eea; color: white;">
+                Voir le classement complet
+            </a>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <!-- Classements provisoires par phase -->
 {% if phases_classements %}
     {% for phase in phases %}

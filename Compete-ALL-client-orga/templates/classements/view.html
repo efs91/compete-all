@@ -38,58 +38,45 @@
     </p>
     {% endif %}
     
-    <div style="background: white; border-radius: 8px; padding: 20px; color: #2c3e50;">
-        <table style="margin: 0;">
+    <div style="background: white; border-radius: 8px; padding: 20px; color: #2c3e50; overflow-x: auto;">
+        <table style="margin: 0; min-width: 100%;">
             <thead>
                 <tr>
-                    <th style="width: 100px; color: #2c3e50;">Position</th>
-                    <th style="color: #2c3e50;">Joueur</th>
-                    <th style="color: #2c3e50;">Club</th>
-                    <th style="color: #2c3e50;">Résultat</th>
+                    <th style="width: 80px; color: #2c3e50; position: sticky; left: 0; background: white;">Position</th>
+                    <th style="min-width: 150px; color: #2c3e50; position: sticky; left: 80px; background: white;">Joueur</th>
+                    <th style="min-width: 120px; color: #2c3e50;">Club</th>
+                    {% if classement_final.phases %}
+                        {% for phase in classement_final.phases %}
+                        <th style="min-width: 180px; color: #2c3e50; text-align: center;">{{ phase.nom }}</th>
+                        {% endfor %}
+                    {% endif %}
                 </tr>
             </thead>
             <tbody>
                 {% for entry in classement_final.classement %}
                 <tr {% if (entry.position and entry.position <= 3) or loop.index <= 3 %}style="background: #fffbea;"{% endif %}>
-                    <td style="text-align: center; font-weight: bold; font-size: 1.2em; color: #2c3e50;">
+                    <td style="text-align: center; font-weight: bold; font-size: 1.2em; color: #2c3e50; position: sticky; left: 0; background: {% if (entry.position and entry.position <= 3) or loop.index <= 3 %}#fffbea{% else %}white{% endif %};">
                         {% if entry.position and entry.position == 1 %}
-                            <span style="font-size: 2em;">🥇</span> 1er
+                            <span style="font-size: 2em;">🥇</span>
                         {% elif entry.position and entry.position == 2 %}
-                            <span style="font-size: 2em;">🥈</span> 2ème
+                            <span style="font-size: 2em;">🥈</span>
                         {% elif entry.position and entry.position == 3 %}
-                            <span style="font-size: 1.8em;">🥉</span> 3ème
+                            <span style="font-size: 1.8em;">🥉</span>
                         {% elif entry.position %}
-                            {{ entry.position }}ème
-                        {% elif loop.index == 1 %}
-                            <span style="font-size: 2em;">🥇</span> 1er
-                        {% elif loop.index == 2 %}
-                            <span style="font-size: 2em;">🥈</span> 2ème
-                        {% elif loop.index == 3 %}
-                            <span style="font-size: 1.8em;">🥉</span> 3ème
+                            {{ entry.position }}
                         {% else %}
-                            {{ loop.index }}ème
+                            {{ loop.index }}
                         {% endif %}
                     </td>
-                    <td style="color: #2c3e50;"><strong>{{ entry.username }}</strong></td>
+                    <td style="color: #2c3e50; position: sticky; left: 80px; background: {% if (entry.position and entry.position <= 3) or loop.index <= 3 %}#fffbea{% else %}white{% endif %};"><strong>{{ entry.username }}</strong></td>
                     <td style="color: #2c3e50;">{{ entry.club if entry.club else '-' }}</td>
-                    <td style="color: #2c3e50; font-size: 0.9em;">
-                        {% if classement_final.phase_finale %}
-                            <strong>{{ classement_final.phase_finale.nom }}</strong>
-                            {% if classement_final.est_definitif %}
-                                {% if entry.position == 1 %}
-                                    : Vainqueur
-                                {% elif entry.position == 2 %}
-                                    : Finaliste
-                                {% elif entry.position == 3 %}
-                                    : Demi-finaliste
-                                {% elif entry.tour_sortie %}
-                                    : Éliminé en {{ ['', 'finale', 'demi-finale', 'quart de finale', '8ème de finale', '16ème de finale', '32ème de finale'][entry.tour_sortie] if entry.tour_sortie <= 6 else 'tour ' ~ entry.tour_sortie }}
-                                {% endif %}
-                            {% else %}
-                                : V={{ entry.victoires }} / V/M={{ "%.2f"|format(entry.vm) if entry.vm is defined else '0' }} / Indice={{ entry.indice if entry.indice is defined else '0' }}
-                            {% endif %}
-                        {% endif %}
-                    </td>
+                    {% if entry.parcours_phases %}
+                        {% for parcours in entry.parcours_phases %}
+                        <td style="color: #2c3e50; font-size: 0.9em; text-align: center; padding: 8px;">
+                            {{ parcours.texte }}
+                        </td>
+                        {% endfor %}
+                    {% endif %}
                 </tr>
                 {% endfor %}
             </tbody>

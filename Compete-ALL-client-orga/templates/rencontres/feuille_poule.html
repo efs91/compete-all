@@ -404,8 +404,7 @@
 {% endfor %}
 
 <!-- Classement en dessous -->
-{% if classement and classement|length > 0 %}
-<div class="card" style="margin-top: 30px;">
+<div class="card" id="classement-card" style="margin-top: 30px;">
     <h3>🏆 Classement provisoire</h3>
     <table style="margin-top: 15px;">
         <thead>
@@ -420,36 +419,43 @@
             </tr>
         </thead>
         <tbody>
-            {% for entry in classement %}
-            <tr>
-                <td style="text-align: center; font-weight: bold;">
-                    {% if loop.index == 1 %}🥇 1er
-                    {% elif loop.index == 2 %}🥈 2e
-                    {% elif loop.index == 3 %}🥉 3e
-                    {% else %}{{ loop.index }}e
-                    {% endif %}
-                </td>
-                <td><strong>{{ entry.username }}</strong></td>
-                <td>{{ entry.club if entry.club else '-' }}</td>
-                <td style="text-align: center; font-weight: bold; color: #27ae60;">{{ entry.victoires }}</td>
-                <td style="text-align: center;">
-                    {% if entry.rencontres_jouees > 0 %}
-                        {{ "%.3f"|format(entry.victoires / entry.rencontres_jouees) }}
-                    {% else %}
-                        0.000
-                    {% endif %}
-                </td>
-                <td style="text-align: center;">{{ entry.rencontres_jouees }}</td>
-                <td style="text-align: center; font-weight: bold; color: #2c3e50;">
-                    {{ entry.touches_donnees - entry.touches_recues }}
-                    <br><small style="color: #7f8c8d;">({{ entry.touches_donnees }}-{{ entry.touches_recues }})</small>
-                </td>
-            </tr>
-            {% endfor %}
+            {% if classement and classement|length > 0 %}
+                {% for entry in classement %}
+                <tr>
+                    <td style="text-align: center; font-weight: bold;">
+                        {% if loop.index == 1 %}🥇 1er
+                        {% elif loop.index == 2 %}🥈 2e
+                        {% elif loop.index == 3 %}🥉 3e
+                        {% else %}{{ loop.index }}e
+                        {% endif %}
+                    </td>
+                    <td><strong>{{ entry.username }}</strong></td>
+                    <td>{{ entry.club if entry.club else '-' }}</td>
+                    <td style="text-align: center; font-weight: bold; color: #27ae60;">{{ entry.victoires }}</td>
+                    <td style="text-align: center;">
+                        {% if entry.rencontres_jouees > 0 %}
+                            {{ "%.3f"|format(entry.victoires / entry.rencontres_jouees) }}
+                        {% else %}
+                            0.000
+                        {% endif %}
+                    </td>
+                    <td style="text-align: center;">{{ entry.rencontres_jouees }}</td>
+                    <td style="text-align: center; font-weight: bold; color: #2c3e50;">
+                        {{ entry.touches_donnees - entry.touches_recues }}
+                        <br><small style="color: #7f8c8d;">({{ entry.touches_donnees }}-{{ entry.touches_recues }})</small>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="7" style="text-align: center; color: #7f8c8d; padding: 20px;">
+                        Aucun résultat pour le moment
+                    </td>
+                </tr>
+            {% endif %}
         </tbody>
     </table>
 </div>
-{% endif %}
 
 <div class="save-indicator" id="save-indicator">
     ✓ Enregistré
@@ -835,8 +841,8 @@ async function updateClassementDisplay() {
         
         const classement = await response.json();
         
-        // Trouver la table du classement
-        const classementTable = document.querySelector('.card tbody');
+        // Trouver la table du classement (avec ID spécifique)
+        const classementTable = document.querySelector('#classement-card tbody');
         if (!classementTable) return;
         
         // Vider et remplir avec les nouvelles données

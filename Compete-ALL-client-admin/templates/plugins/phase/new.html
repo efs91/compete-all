@@ -255,6 +255,7 @@ const typesConfig = {
                     <div class="priority-order">
                         <div class="priority-item">
                             <select name="priorite_1">
+                                <option value="V/M" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[0] == 'V/M' %}selected{% endif %}>V/M (Victoires/Matchs)</option>
                                 <option value="Points de Victoire" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[0] == 'Points de Victoire' %}selected{% endif %}>Points de Victoire</option>
                                 <option value="Indice (GoalAverage)" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[0] == 'Indice (GoalAverage)' %}selected{% endif %}>Indice (GoalAverage)</option>
                                 <option value="Points mis" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[0] == 'Points mis' %}selected{% endif %}>Points mis</option>
@@ -263,6 +264,7 @@ const typesConfig = {
                         </div>
                         <div class="priority-item">
                             <select name="priorite_2">
+                                <option value="V/M" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[1] == 'V/M' %}selected{% endif %}>V/M (Victoires/Matchs)</option>
                                 <option value="Indice (GoalAverage)" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[1] == 'Indice (GoalAverage)' %}selected{% endif %}>Indice (GoalAverage)</option>
                                 <option value="Points de Victoire" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[1] == 'Points de Victoire' %}selected{% endif %}>Points de Victoire</option>
                                 <option value="Points mis" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[1] == 'Points mis' %}selected{% endif %}>Points mis</option>
@@ -271,6 +273,7 @@ const typesConfig = {
                         </div>
                         <div class="priority-item">
                             <select name="priorite_3">
+                                <option value="V/M" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[2] == 'V/M' %}selected{% endif %}>V/M (Victoires/Matchs)</option>
                                 <option value="Points mis" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[2] == 'Points mis' %}selected{% endif %}>Points mis</option>
                                 <option value="Points de Victoire" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[2] == 'Points de Victoire' %}selected{% endif %}>Points de Victoire</option>
                                 <option value="Indice (GoalAverage)" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[2] == 'Indice (GoalAverage)' %}selected{% endif %}>Indice (GoalAverage)</option>
@@ -279,6 +282,7 @@ const typesConfig = {
                         </div>
                         <div class="priority-item">
                             <select name="priorite_4">
+                                <option value="V/M" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[3] == 'V/M' %}selected{% endif %}>V/M (Victoires/Matchs)</option>
                                 <option value="Points Pris" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[3] == 'Points Pris' %}selected{% endif %}>Points Pris</option>
                                 <option value="Points de Victoire" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[3] == 'Points de Victoire' %}selected{% endif %}>Points de Victoire</option>
                                 <option value="Indice (GoalAverage)" {% if phase and phase.scoring and phase.scoring.ordrePriorite and phase.scoring.ordrePriorite[3] == 'Indice (GoalAverage)' %}selected{% endif %}>Indice (GoalAverage)</option>

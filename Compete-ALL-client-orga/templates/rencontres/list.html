@@ -167,7 +167,13 @@
             <tbody>
                 {% for rencontre in rencontres %}
                 <tr>
-                    <td>Match {{ loop.index }}</td>
+                    <td>
+                        {% if rencontre.nom_tour %}
+                            {{ rencontre.nom_tour }}
+                        {% else %}
+                            Match {{ loop.index }}
+                        {% endif %}
+                    </td>
                     {% if poules and poules|length > 0 %}
                     <td>
                         {% for poule in poules %}
@@ -181,7 +187,13 @@
                     </td>
                     {% endif %}
                     <td>
-                        {% if rencontre.participants_details %}
+                        {% if rencontre.is_bye %}
+                            {% if rencontre.participants_details %}
+                                <strong>{{ rencontre.participants_details[0].username }}</strong>
+                                {% if rencontre.participants_details[0].club %}<small>({{ rencontre.participants_details[0].club }})</small>{% endif %}
+                                <em style="color: #27ae60; margin-left: 10px;">→ Qualifié d'office (bye)</em>
+                            {% endif %}
+                        {% elif rencontre.participants_details %}
                             {% for participant in rencontre.participants_details %}
                                 <strong>{{ participant.username }}</strong>
                                 {% if participant.club %}<small>({{ participant.club }})</small>{% endif %}
@@ -192,7 +204,9 @@
                         {% endif %}
                     </td>
                     <td>
-                        {% if rencontre.resultats %}
+                        {% if rencontre.is_bye %}
+                            <span class="badge" style="background: #27ae60;">✓ Bye (qualifié)</span>
+                        {% elif rencontre.resultats %}
                             <span class="badge badge-success">✓ Terminée</span>
                         {% else %}
                             <span class="badge badge-warning">En attente</span>
@@ -200,10 +214,14 @@
                     </td>
                     <td>
                         <div class="actions">
-                            <a href="{{ url_for('edit_resultats', rencontre_id=rencontre.id) }}" 
-                               class="btn btn-small">
-                                {% if rencontre.resultats %}Voir résultats{% else %}Saisir résultats{% endif %}
-                            </a>
+                            {% if rencontre.is_bye %}
+                                <span style="color: #7f8c8d; font-size: 0.9em;">Pas de saisie</span>
+                            {% else %}
+                                <a href="{{ url_for('edit_resultats', rencontre_id=rencontre.id) }}" 
+                                   class="btn btn-small">
+                                    {% if rencontre.resultats %}Voir résultats{% else %}Saisir résultats{% endif %}
+                                </a>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>

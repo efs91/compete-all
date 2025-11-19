@@ -9,10 +9,10 @@ import logging
 router = APIRouter()
 
 # Fonction utilitaire pour formater une phase avec ses joueurs pour un événement spécifique
-def format_phase_response(db_phase: models.Phase, evenement_id: str, db: Session) -> Dict:
+def format_phase_response(db_phase: models.Phase, evenement_id: str, phase_instance_id: str, db: Session) -> Dict:
     # Récupérer les associations phase_evenement_joueur
     associations = db.query(models.phase_evenement_joueur).filter(
-        models.phase_evenement_joueur.c.phase_id == db_phase.id,
+        models.phase_evenement_joueur.c.phase_instance_id == phase_instance_id,
         models.phase_evenement_joueur.c.evenement_id == evenement_id
     ).all()
     
@@ -151,45 +151,44 @@ def add_phase_to_event(
     phase_relation: schemas.PhaseEventRelation, 
     db: Session = Depends(get_db)
 ):
-    """Ajoute une phase existante à un événement avec la liste des joueurs"""
+    """Ajoute une instance de phase à un événement avec la liste des joueurs"""
+    import uuid
+    
     # Vérifier si l'événement existe
     db_evenement = db.query(models.Evenement).filter(models.Evenement.id == evenement_id).first()
     if db_evenement is None:
         raise HTTPException(status_code=404, detail="Événement non trouvé")
     
-    # Vérifier si la phase existe
-    db_phase = db.query(models.Phase).filter(models.Phase.id == phase_relation.phase_id).first()
-    if db_phase is None:
+    # Vérifier si la phase template existe
+    db_phase_template = db.query(models.Phase).filter(models.Phase.id == phase_relation.phase_id).first()
+    if db_phase_template is None:
         raise HTTPException(status_code=404, detail="Phase non trouvée")
     
-    # Vérifier si la phase est déjà dans l'événement
-    existing = db.query(models.phase_evenement).filter(
-        models.phase_evenement.c.phase_id == phase_relation.phase_id,
-        models.phase_evenement.c.evenement_id == evenement_id
-    ).first()
+    # Déterminer le prochain ordre disponible
+    max_ordre = db.execute(
+        select(func.max(models.phase_evenement.c.ordre))
+        .where(models.phase_evenement.c.evenement_id == evenement_id)
+    ).scalar()
     
-    if not existing:
-        # Déterminer le prochain ordre disponible
-        max_ordre = db.execute(
-            select(func.max(models.phase_evenement.c.ordre))
-            .where(models.phase_evenement.c.evenement_id == evenement_id)
-        ).scalar()
-        
-        next_ordre = (max_ordre or 0) + 1
-        
-        # Fusionner config_qualification et config_decalages dans un seul JSON
-        config = phase_relation.config_qualification or {}
-        if phase_relation.config_decalages:
-            config['decalages'] = phase_relation.config_decalages
-        
-        # Ajouter la relation phase-événement avec l'ordre et la config complète
-        stmt = models.phase_evenement.insert().values(
-            phase_id=phase_relation.phase_id,
-            evenement_id=evenement_id,
-            ordre=next_ordre,
-            config_qualification=config
-        )
-        db.execute(stmt)
+    next_ordre = (max_ordre or 0) + 1
+    
+    # Fusionner config_qualification et config_decalages dans un seul JSON
+    config = phase_relation.config_qualification or {}
+    if phase_relation.config_decalages:
+        config['decalages'] = phase_relation.config_decalages
+    
+    # Créer une nouvelle INSTANCE de phase (pas une copie du template, juste une référence)
+    phase_instance_id = str(uuid.uuid4())
+    
+    # Ajouter la relation phase-événement avec l'ordre et la config complète
+    stmt = models.phase_evenement.insert().values(
+        id=phase_instance_id,  # ID unique de l'instance
+        phase_id=phase_relation.phase_id,  # Référence au template
+        evenement_id=evenement_id,
+        ordre=next_ordre,
+        config_qualification=config
+    )
+    db.execute(stmt)
     
     # Ajouter les joueurs s'ils sont spécifiés
     if phase_relation.joueurs:
@@ -201,7 +200,7 @@ def add_phase_to_event(
             
             # Vérifier si l'association existe déjà
             existing_joueur = db.query(models.phase_evenement_joueur).filter(
-                models.phase_evenement_joueur.c.phase_id == phase_relation.phase_id,
+                models.phase_evenement_joueur.c.phase_instance_id == phase_instance_id,
                 models.phase_evenement_joueur.c.evenement_id == evenement_id,
                 models.phase_evenement_joueur.c.joueur_id == joueur_data.joueur_id
             ).first()
@@ -211,7 +210,7 @@ def add_phase_to_event(
             
             # Ajouter l'association avec l'ordre d'inscription et le seed
             stmt = models.phase_evenement_joueur.insert().values(
-                phase_id=phase_relation.phase_id,
+                phase_instance_id=phase_instance_id,  # Référence à l'instance, pas au template
                 evenement_id=evenement_id,
                 joueur_id=joueur_data.joueur_id,
                 ordre_inscription=joueur_data.ordre_inscription,
@@ -220,7 +219,9 @@ def add_phase_to_event(
             db.execute(stmt)
     
     db.commit()
-    return format_phase_response(db_phase, evenement_id, db)
+    
+    # Retourner les infos de la phase template avec les joueurs de cette instance
+    return format_phase_response(db_phase_template, evenement_id, phase_instance_id, db)
 
 @router.get("/evenements/{evenement_id}/phases", response_model=List[schemas.PhaseInEvent])
 def read_phases_for_event(evenement_id: str, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
@@ -230,45 +231,73 @@ def read_phases_for_event(evenement_id: str, skip: int = 0, limit: int = 100, db
     if db_evenement is None:
         raise HTTPException(status_code=404, detail="Événement non trouvé")
     
-    # Récupérer les phases avec leur ordre
-    phase_ordres = db.execute(
-        select(models.phase_evenement.c.phase_id, models.phase_evenement.c.ordre)
+    # Récupérer les instances de phases avec leur ordre
+    phase_instances = db.execute(
+        select(models.phase_evenement.c.id, models.phase_evenement.c.phase_id, models.phase_evenement.c.ordre)
         .where(models.phase_evenement.c.evenement_id == evenement_id)
         .order_by(models.phase_evenement.c.ordre)
     ).all()
     
-    phase_ids = [p[0] for p in phase_ordres]
-    
-    if not phase_ids:
+    if not phase_instances:
         return []
     
-    # Récupérer les phases dans l'ordre
-    phases = db.query(models.Phase).filter(models.Phase.id.in_(phase_ids)).all()
+    # Récupérer les templates de phases
+    phase_template_ids = [p[1] for p in phase_instances]  # p[1] = phase_id (template)
+    phases = db.query(models.Phase).filter(models.Phase.id.in_(phase_template_ids)).all()
     
     # Créer un dictionnaire pour garder l'ordre
     phase_dict = {phase.id: phase for phase in phases}
-    phases_ordered = [phase_dict[phase_id] for phase_id in phase_ids if phase_id in phase_dict]
     
-    return [format_phase_response(phase, evenement_id, db) for phase in phases_ordered]
+    # Formater chaque instance avec son template et ses joueurs
+    result = []
+    for instance in phase_instances:
+        instance_id = instance[0]  # ID de l'instance
+        template_id = instance[1]  # ID du template
+        if template_id in phase_dict:
+            result.append(format_phase_response(phase_dict[template_id], evenement_id, instance_id, db))
+    
+    return result
 
 @router.get("/evenements/{evenement_id}/phases/{phase_id}", response_model=schemas.PhaseInEvent)
 def read_phase_in_event(evenement_id: str, phase_id: str, db: Session = Depends(get_db)):
-    """Récupère les détails d'une phase spécifique dans un événement"""
-    # Vérifier si la phase existe
-    db_phase = db.query(models.Phase).filter(models.Phase.id == phase_id).first()
-    if db_phase is None:
-        raise HTTPException(status_code=404, detail="Phase non trouvée")
+    """Récupère les détails d'une phase spécifique dans un événement
+    Note: phase_id peut être soit l'ID du template, soit l'ID de l'instance"""
     
-    # Vérifier si la phase est dans l'événement
-    phase_in_event = db.query(models.phase_evenement).filter(
-        models.phase_evenement.c.phase_id == phase_id,
-        models.phase_evenement.c.evenement_id == evenement_id
+    # D'abord essayer de trouver par instance ID
+    phase_instance = db.execute(
+        select(models.phase_evenement.c.id, models.phase_evenement.c.phase_id)
+        .where(
+            models.phase_evenement.c.id == phase_id,
+            models.phase_evenement.c.evenement_id == evenement_id
+        )
     ).first()
     
-    if not phase_in_event:
-        raise HTTPException(status_code=404, detail="Phase non trouvée dans cet événement")
+    if phase_instance:
+        # C'est un ID d'instance
+        instance_id = phase_instance[0]
+        template_id = phase_instance[1]
+    else:
+        # Essayer de trouver par template ID
+        phase_instance = db.execute(
+            select(models.phase_evenement.c.id, models.phase_evenement.c.phase_id)
+            .where(
+                models.phase_evenement.c.phase_id == phase_id,
+                models.phase_evenement.c.evenement_id == evenement_id
+            )
+        ).first()
+        
+        if not phase_instance:
+            raise HTTPException(status_code=404, detail="Phase non trouvée dans cet événement")
+        
+        instance_id = phase_instance[0]
+        template_id = phase_instance[1]
     
-    return format_phase_response(db_phase, evenement_id, db)
+    # Récupérer le template de phase
+    db_phase = db.query(models.Phase).filter(models.Phase.id == template_id).first()
+    if db_phase is None:
+        raise HTTPException(status_code=404, detail="Template de phase non trouvé")
+    
+    return format_phase_response(db_phase, evenement_id, instance_id, db)
 
 @router.post("/evenements/{evenement_id}/phases/{phase_id}/reinitialiser")
 def reinitialiser_donnees_phase(evenement_id: str, phase_id: str, db: Session = Depends(get_db)):

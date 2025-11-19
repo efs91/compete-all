@@ -628,16 +628,96 @@ def view_rencontres(evenement_id, phase_id):
         # Récupérer les joueurs inscrits et calculer le classement provisoire
         joueurs_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}/phases/{phase_id}/joueurs")
         joueurs = joueurs_response.json() if joueurs_response.status_code == 200 else []
-        classement = calculate_provisional_ranking(phase_id, joueurs)
+        
+        # Déterminer le classement à afficher
+        type_general = phase.get('type_general', 'poule')
+        if 'elimination' in type_general.lower() or 'bracket' in type_general.lower():
+            # Pour un tableau, vérifier s'il a des résultats
+            classement_tableau = calculate_provisional_ranking(phase_id, joueurs)
+            a_des_resultats = any(j.get('rencontres_jouees', 0) > 0 for j in classement_tableau)
+            
+            if not a_des_resultats:
+                # Tableau pas commencé : afficher le classement de la phase précédente
+                phases_in_event_sorted = sorted(phases_in_event, key=lambda p: p.get('ordre') if p.get('ordre') is not None else 999)
+                phase_idx = next((i for i, p in enumerate(phases_in_event_sorted) if p['id'] == phase_id), None)
+                
+                if phase_idx and phase_idx > 0:
+                    phase_precedente = phases_in_event_sorted[phase_idx - 1]
+                    joueurs_prec_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}/phases/{phase_precedente['id']}/joueurs")
+                    if joueurs_prec_response.status_code == 200:
+                        joueurs_prec = joueurs_prec_response.json()
+                        classement = calculate_provisional_ranking(phase_precedente['id'], joueurs_prec)
+                    else:
+                        classement = classement_tableau
+                else:
+                    classement = classement_tableau
+            else:
+                classement = classement_tableau
+        else:
+            classement = calculate_provisional_ranking(phase_id, joueurs)
         
         # Détecter le type de phase pour afficher le bon mode
         type_general = phase.get('type_general', 'poule')
+        
+        # Filtrer les rencontres pour les tableaux : enlever les byes et matchs vides
+        rencontres_filtrees = []
+        if 'elimination' in type_general.lower() or 'bracket' in type_general.lower():
+            # Calculer les noms des tours pour l'affichage
+            import math
+            
+            # Trouver le tour maximum pour déterminer la taille du tableau
+            max_tour = max([r.get('tour', 1) for r in rencontres], default=1)
+            
+            # Générer les noms de tours
+            noms_tours = {}
+            for i in range(1, max_tour + 1):
+                if i == max_tour:
+                    noms_tours[i] = "Finale"
+                elif i == max_tour - 1:
+                    noms_tours[i] = "Demi-Finale"
+                elif i == max_tour - 2:
+                    noms_tours[i] = "Quart de Finale"
+                else:
+                    # 1/8, 1/16, 1/32...
+                    fraction = 2 ** (max_tour - i + 1)
+                    noms_tours[i] = f"1/{fraction} de Finale"
+            
+            for rencontre in rencontres:
+                participants = rencontre.get('participants', [])
+                participants_details = rencontre.get('participants_details', [])
+                
+                # Ne pas afficher si aucun participant
+                if not participants or len(participants) == 0:
+                    continue
+                
+                # Ne pas afficher si un participant est None/null (adversaire pas encore connu)
+                if None in participants or any(p is None for p in participants):
+                    continue
+                
+                # Ne pas afficher si les détails contiennent "Inconnu"
+                if participants_details:
+                    if any(p.get('username') == 'Inconnu' for p in participants_details):
+                        continue
+                
+                # Si un seul participant (bye), marquer comme bye
+                if len(participants) == 1:
+                    rencontre['is_bye'] = True
+                    rencontre['bye_winner_id'] = participants[0]
+                
+                # Ajouter le nom du tour
+                tour = rencontre.get('tour', 1)
+                position = rencontre.get('position', 0)
+                rencontre['nom_tour'] = f"{noms_tours.get(tour, f'Tour {tour}')} - Match {position + 1}"
+                
+                rencontres_filtrees.append(rencontre)
+        else:
+            rencontres_filtrees = rencontres
         
         return render_template('rencontres/list.html',
                              evenement=evenement,
                              phase=phase,
                              type_general=type_general,
-                             rencontres=rencontres,
+                             rencontres=rencontres_filtrees,
                              poules=poules,
                              rencontres_by_poule=rencontres_by_poule,
                              progression_poules=progression_poules,
@@ -970,7 +1050,8 @@ def edit_resultats(rencontre_id):
             points = request.form.getlist('points')
             actions = request.form.getlist('actions')
             
-            # Créer les résultats
+            # Construire la liste des résultats
+            resultats_list = []
             for i, participant_id in enumerate(participants):
                 resultat_data = {"participant_id": participant_id}
                 
@@ -990,10 +1071,20 @@ def edit_resultats(rencontre_id):
                     except:
                         resultat_data["actions"] = {"note": actions[i]}
                 
-                requests.post(f"{API_BASE_URL}/rencontres/{rencontre_id}/resultats",
-                            json=resultat_data)
+                resultats_list.append(resultat_data)
             
-            flash("Résultats enregistrés avec succès!", "success")
+            # Utiliser l'endpoint bulk pour sauvegarder tous les résultats en une fois
+            # Cela permettra la progression automatique dans les tableaux
+            response = requests.put(
+                f"{API_BASE_URL}/rencontres/{rencontre_id}/resultats/bulk",
+                json=resultats_list
+            )
+            
+            if response.status_code in [200, 201]:
+                flash("Résultats enregistrés avec succès!", "success")
+            else:
+                flash(f"Erreur lors de l'enregistrement: {response.text}", "error")
+            
             return redirect(request.referrer or url_for('index'))
             
         except Exception as e:
@@ -1044,32 +1135,126 @@ def edit_resultats(rencontre_id):
 # CLASSEMENTS
 # ============================================
 
+def enrich_classement_with_phases(classement, phases, phases_classements, evenement_id):
+    """Enrichit le classement avec le parcours du joueur dans toutes les phases
+    
+    Args:
+        classement: Liste des joueurs classés (dernière phase)
+        phases: Liste de toutes les phases de l'événement
+        phases_classements: Dict {phase_id: classement_phase}
+        evenement_id: ID de l'événement
+        
+    Returns:
+        Liste enrichie avec parcours_phases pour chaque joueur
+    """
+    for entry in classement:
+        joueur_id = entry.get('joueur_id')
+        entry['parcours_phases'] = []
+        
+        # Pour chaque phase, chercher le résultat du joueur
+        for phase in phases:
+            phase_id = phase['id']
+            phase_classement = phases_classements.get(phase_id, [])
+            
+            # Trouver le joueur dans cette phase
+            joueur_dans_phase = next((j for j in phase_classement if j.get('joueur_id') == joueur_id), None)
+            
+            if joueur_dans_phase:
+                # Déterminer le résultat selon le type de phase
+                type_general = phase.get('type_general', '').lower()
+                resultat = {
+                    'phase_nom': phase.get('nom'),
+                    'phase_type': type_general
+                }
+                
+                if 'elimination' in type_general or 'bracket' in type_general:
+                    # Tableau d'élimination
+                    # Ne montrer vainqueur/finaliste que si les matchs sont joués
+                    if joueur_dans_phase.get('rencontres_jouees', 0) > 0:
+                        if joueur_dans_phase.get('est_vainqueur'):
+                            resultat['texte'] = "Vainqueur"
+                        elif joueur_dans_phase.get('position') == 2:
+                            resultat['texte'] = "Finaliste"
+                        elif joueur_dans_phase.get('position') == 3:
+                            resultat['texte'] = "Demi-finaliste"
+                        elif joueur_dans_phase.get('tour_sortie'):
+                            tours_noms = ['', 'finale', 'demi-finale', 'quart de finale', '8ème de finale', '16ème de finale', '32ème de finale']
+                            tour = joueur_dans_phase.get('tour_sortie')
+                            if tour <= 6:
+                                resultat['texte'] = f"Éliminé en {tours_noms[tour]}"
+                            else:
+                                resultat['texte'] = f"Éliminé (tour {tour})"
+                        else:
+                            resultat['texte'] = f"{joueur_dans_phase.get('position', '?')}ème"
+                    else:
+                        # Pas de matchs joués : afficher la position de qualification
+                        position = joueur_dans_phase.get('rang_entree') or joueur_dans_phase.get('position', '?')
+                        resultat['texte'] = f"Qualifié en position {position}"
+                else:
+                    # Poule ou course
+                    position = phase_classement.index(joueur_dans_phase) + 1 if joueur_dans_phase in phase_classement else '?'
+                    vm = joueur_dans_phase.get('vm', 0)
+                    indice = joueur_dans_phase.get('indice', 0)
+                    resultat['texte'] = f"{position}{'er' if position == 1 else 'ème'} (V/M={vm:.2f}, Indice={indice})"
+                
+                entry['parcours_phases'].append(resultat)
+            else:
+                # Joueur pas dans cette phase
+                entry['parcours_phases'].append({
+                    'phase_nom': phase.get('nom'),
+                    'phase_type': '',
+                    'texte': '-'
+                })
+    
+    return classement
+
+
 def calculate_event_final_ranking(evenement_id):
-    """Calculer le classement final de l'événement
+    """Calculer le classement final de l'événement avec le parcours complet
     
     Logique:
     - Si la dernière phase est un tableau d'élimination ET que la finale est jouée -> classement définitif
     - Sinon -> classement provisoire basé sur la dernière phase avec résultats
+    - Pour chaque joueur, on ajoute son parcours dans TOUTES les phases
     
     Returns:
-        dict avec 'classement', 'est_definitif', 'phase_finale'
+        dict avec 'classement', 'est_definitif', 'phases', 'phase_finale'
     """
     try:
         # Récupérer toutes les phases de l'événement, triées par ordre
         phases_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}/phases")
         if phases_response.status_code != 200:
             print(f"DEBUG: Pas de phases pour l'événement {evenement_id}")
-            return {'classement': [], 'est_definitif': False, 'phase_finale': None}
+            return {'classement': [], 'est_definitif': False, 'phases': [], 'phase_finale': None}
         
         phases = phases_response.json()
         if not phases:
             print(f"DEBUG: Liste de phases vide pour l'événement {evenement_id}")
-            return {'classement': [], 'est_definitif': False, 'phase_finale': None}
+            return {'classement': [], 'est_definitif': False, 'phases': [], 'phase_finale': None}
         
         print(f"DEBUG: {len(phases)} phases trouvées pour l'événement {evenement_id}")
         
         # Trier les phases par ordre (gérer les None)
         phases.sort(key=lambda p: p.get('ordre') if p.get('ordre') is not None else 999)
+        
+        # Calculer le classement de chaque phase
+        phases_classements = {}
+        for idx, phase in enumerate(phases):
+            joueurs_phase_response = requests.get(
+                f"{API_BASE_URL}/evenements/{evenement_id}/phases/{phase['id']}/joueurs"
+            )
+            if joueurs_phase_response.status_code == 200:
+                joueurs_phase = joueurs_phase_response.json()
+                
+                # Si c'est un tableau et pas la première phase, passer le classement de la phase précédente
+                classement_entree = None
+                if idx > 0 and ('elimination' in phase.get('type_general', '').lower() or 'bracket' in phase.get('type_general', '').lower()):
+                    phase_precedente = phases[idx - 1]
+                    if phase_precedente['id'] in phases_classements:
+                        classement_entree = phases_classements[phase_precedente['id']]
+                
+                classement_phase = calculate_provisional_ranking(phase['id'], joueurs_phase, classement_entree)
+                phases_classements[phase['id']] = classement_phase
         
         # La dernière phase
         derniere_phase = phases[-1]
@@ -1133,19 +1318,48 @@ def calculate_event_final_ranking(evenement_id):
                                 classement_entree
                             )
                             
+                            # Enrichir le classement avec le parcours dans toutes les phases
+                            classement = enrich_classement_with_phases(classement, phases, phases_classements, evenement_id)
+                            
                             return {
                                 'classement': classement,
                                 'est_definitif': True,
+                                'phases': phases,
                                 'phase_finale': derniere_phase
                             }
         
-        # Classement provisoire : utiliser la dernière phase avec résultats
-        classement = calculate_provisional_ranking(derniere_phase['id'], joueurs)
+        # Classement provisoire : 
+        # Si c'est un tableau sans résultats, utiliser le classement de la phase précédente
+        if ('elimination' in type_general or 'bracket' in type_general):
+            # Récupérer le classement d'entrée (phase précédente)
+            classement_entree = None
+            if len(phases) > 1:
+                phase_precedente = phases[-2]
+                if phase_precedente['id'] in phases_classements:
+                    classement_entree = phases_classements[phase_precedente['id']]
+            
+            # Vérifier si le tableau a des résultats
+            classement_tableau = calculate_provisional_ranking(derniere_phase['id'], joueurs, classement_entree)
+            a_des_resultats = any(j.get('rencontres_jouees', 0) > 0 for j in classement_tableau)
+            
+            if not a_des_resultats and len(phases) > 1:
+                # Tableau pas commencé, utiliser la phase précédente pour le classement général
+                print(f"DEBUG: Tableau pas commencé, utilisation de la phase précédente")
+                classement = phases_classements[phases[-2]['id']]
+            else:
+                classement = classement_tableau
+        else:
+            classement = calculate_provisional_ranking(derniere_phase['id'], joueurs)
+        
         print(f"DEBUG: Classement provisoire calculé - {len(classement)} joueurs")
+        
+        # Enrichir le classement avec le parcours dans toutes les phases
+        classement = enrich_classement_with_phases(classement, phases, phases_classements, evenement_id)
         
         return {
             'classement': classement,
             'est_definitif': False,
+            'phases': phases,
             'phase_finale': derniere_phase
         }
         
@@ -1441,8 +1655,14 @@ def calculate_bracket_ranking(phase_id, joueurs_inscrits, classement_entree):
         return []
 
 
-def calculate_provisional_ranking(phase_id, joueurs_inscrits):
-    """Calculer le classement provisoire d'une phase basé sur les résultats disponibles"""
+def calculate_provisional_ranking(phase_id, joueurs_inscrits, classement_entree=None):
+    """Calculer le classement provisoire d'une phase basé sur les résultats disponibles
+    
+    Args:
+        phase_id: ID de la phase
+        joueurs_inscrits: Liste des joueurs inscrits
+        classement_entree: Classement de la phase précédente (pour les tableaux)
+    """
     classement = {}
     
     try:
@@ -1460,8 +1680,30 @@ def calculate_provisional_ranking(phase_id, joueurs_inscrits):
         # Si c'est un tableau d'élimination, utiliser la fonction spécifique
         if type_general and 'elimination' in type_general.lower():
             # Pour un tableau, on a besoin du classement d'entrée
-            # On va chercher la phase précédente
-            return calculate_bracket_ranking(phase_id, joueurs_inscrits, [])
+            # Si pas fourni, essayer de le récupérer depuis l'événement
+            if not classement_entree:
+                # Trouver l'événement de cette phase
+                evenement_id = phase.get('evenement_id')
+                if evenement_id:
+                    phases_response = requests.get(f"{API_BASE_URL}/evenements/{evenement_id}/phases")
+                    if phases_response.status_code == 200:
+                        phases = phases_response.json()
+                        phases.sort(key=lambda p: p.get('ordre') if p.get('ordre') is not None else 999)
+                        
+                        # Trouver l'index de la phase actuelle
+                        phase_actuelle_idx = next((i for i, p in enumerate(phases) if p['id'] == phase_id), None)
+                        
+                        # Si c'est pas la première phase, récupérer le classement de la phase précédente
+                        if phase_actuelle_idx and phase_actuelle_idx > 0:
+                            phase_precedente = phases[phase_actuelle_idx - 1]
+                            joueurs_prec_response = requests.get(
+                                f"{API_BASE_URL}/evenements/{evenement_id}/phases/{phase_precedente['id']}/joueurs"
+                            )
+                            if joueurs_prec_response.status_code == 200:
+                                joueurs_prec = joueurs_prec_response.json()
+                                classement_entree = calculate_provisional_ranking(phase_precedente['id'], joueurs_prec)
+            
+            return calculate_bracket_ranking(phase_id, joueurs_inscrits, classement_entree or [])
         
         # Initialiser les scores pour tous les joueurs inscrits
         for joueur in joueurs_inscrits:

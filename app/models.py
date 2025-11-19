@@ -44,20 +44,22 @@ poule_joueur = Table(
 phase_evenement_joueur = Table(
     'phase_evenement_joueur', 
     Base.metadata,
-    Column('phase_id', String(36), ForeignKey('phases.id')),
+    Column('phase_instance_id', String(36), ForeignKey('phase_evenement.id')),  # Référence à l'instance de phase
     Column('evenement_id', String(36), ForeignKey('evenements.id')),
     Column('joueur_id', String(36), ForeignKey('joueurs.id')),
     Column('ordre_inscription', Integer, nullable=False),
     Column('seed', Integer, nullable=True),
     Column('statut', String(50), nullable=False, default='inscrit'),  # inscrit, qualifie, elimine, repechage
-    Column('phase_origine_id', String(36), nullable=True)  # ID de la phase d'où vient la qualification (NULL si première phase)
+    Column('phase_origine_id', String(36), nullable=True)  # ID de l'instance de phase d'où vient la qualification (NULL si première phase)
 )
 
 # Table de liaison entre phases et événements
+# Chaque ligne = une INSTANCE de phase dans un événement
 phase_evenement = Table(
     'phase_evenement',
     Base.metadata,
-    Column('phase_id', String(36), ForeignKey('phases.id')),
+    Column('id', String(36), primary_key=True, default=lambda: str(uuid.uuid4())),  # ID unique de l'instance
+    Column('phase_id', String(36), ForeignKey('phases.id')),  # Référence au template de phase
     Column('evenement_id', String(36), ForeignKey('evenements.id')),
     Column('ordre', Integer, nullable=False, default=0),
     Column('config_qualification', JSON, nullable=True)  # Configuration de qualification vers phase suivante
@@ -102,9 +104,8 @@ class Joueur(Base):
     photos = Column(JSON, nullable=True)  # Pour stocker un tableau d'URLs de photos
 
     equipes = relationship("Equipe", secondary=equipe_joueur, back_populates="joueurs")
-    # Modification de la relation pour utiliser la nouvelle table de liaison
-    phases = relationship("Phase", secondary=phase_evenement_joueur, back_populates="joueurs", overlaps="evenements,joueurs")
-    evenements = relationship("Evenement", secondary=phase_evenement_joueur, back_populates="joueurs", overlaps="phases,joueurs")
+    # Relations phase/evenement supprimées car phase_evenement_joueur utilise maintenant phase_instance_id
+    # et ne peut plus servir de table de liaison directe avec Phase
 
 class Phase(Base):
     __tablename__ = "phases"
@@ -126,8 +127,7 @@ class Phase(Base):
     evenements = relationship("Evenement", secondary=phase_evenement, back_populates="phases")
     format = relationship("Format", back_populates="phases")
     type = relationship("Type", back_populates="phases")
-    # Utilisation de la nouvelle table de liaison
-    joueurs = relationship("Joueur", secondary=phase_evenement_joueur, back_populates="phases", overlaps="evenements,joueurs")
+    # Relation joueurs supprimée car phase_evenement_joueur utilise maintenant phase_instance_id
     rencontres = relationship("Rencontre", back_populates="phase")
     classements = relationship("Classement", back_populates="phase")
     poules = relationship("Poule", back_populates="phase")
@@ -154,7 +154,7 @@ class Evenement(Base):
     
     # Mise à jour des relations
     phases = relationship("Phase", secondary=phase_evenement, back_populates="evenements")
-    joueurs = relationship("Joueur", secondary=phase_evenement_joueur, back_populates="evenements", overlaps="phases,joueurs")
+    # Relation joueurs supprimée car phase_evenement_joueur utilise maintenant phase_instance_id
     equipes = relationship("Equipe", back_populates="evenement")
     classements = relationship("Classement", back_populates="evenement")
 
